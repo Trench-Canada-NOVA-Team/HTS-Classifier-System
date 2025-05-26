@@ -1,4 +1,4 @@
-# HTS Code Classification System
+# HTS Code Classification System and Tariff Calculator
 
 An AI-powered system for classifying products into US Harmonized Tariff Schedule (HTS) codes using natural language processing and machine learning.
 
@@ -79,6 +79,47 @@ hts-classifier/
 - Specify product usage or purpose
 - Mention specific characteristics (size, weight, etc.)
 - Include industry-specific terminology
+
+## Tariff Calculator
+
+The system includes a Tariff & Net Value Calculator (located in `TariffCalculator Research/experiment1.py`) that helps users calculate:
+- Net value
+- Associated tariff costs
+- Other import-related fees
+
+### Calculator Features
+
+- Interactive Streamlit interface
+- Real-time calculations
+- Support for:
+  - Invoice value calculations
+  - Brokerage fees
+  - Freight costs
+  - Duty percentages
+  - Merchandise Processing Fee (MPF)
+  - Harbor Maintenance Fee (HMF)
+  - Tariff percentages
+
+### Formula Used
+
+The calculator uses the following formula:
+```
+Net Value = (Invoice Value - Brokerage - Freight) / (1 + Duty% + MPF% + HMF% + Tariff%)
+Tariff Cost = Net Value × Tariff%
+```
+
+### Default Values
+- MPF: 0.3464%
+- HMF: 0.125%
+
+### Usage Example
+
+1. Enter the invoice value in USD
+2. Input brokerage and freight costs
+3. Specify duty and tariff percentages
+4. Click "Calculate" to get:
+   - Net Value
+   - Tariff Cost
 
 ## License
 
