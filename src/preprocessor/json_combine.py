@@ -15,19 +15,6 @@ output_file = os.path.join(data_dir, 'combined_data.json')
 # Store all loaded data
 all_data = []
 
-# # Include the first file (htsdata.json)
-# first_file = os.path.join(data_dir, 'htsdata.json')
-# try:
-#     with open(first_file, 'r', encoding='utf-8') as f:
-#         data = json.load(f)
-#         if isinstance(data, list):
-#             all_data.extend(data)
-#         else:
-#             all_data.append(data)
-# except Exception as e:
-#     print(f"Error reading htsdata.json: {e}")
-
-# Loop through the numbered files from htsdata(1).json to htsdata(99).json
 for i in range(1, 100):
     filename = f'htsdata ({i}).json'
     filepath = os.path.join(data_dir, filename)

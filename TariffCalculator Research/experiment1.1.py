@@ -2,6 +2,7 @@ import streamlit as st
 from json_search import find_duty_by_hscode
 import json
 import os
+import re
 
 def calculate_net_value(
     invoice_value,
@@ -36,7 +37,15 @@ st.title(" Tariff & Net Value Calculator")
 st.subheader(" Input Values")
 
 # Input for HS Tariff Code
-raw_hs_code = st.text_input("HS Tariff Code", max_chars=12)
+raw_hs_code = st.text_input("HS Tariff Code", max_chars=13, help="Enter the HS Tariff Code (up to 13 characters).")
+
+allowed_chars_pattern = r"^[0-9. ]*$"
+
+# Check the pattern
+if raw_hs_code and not re.match(allowed_chars_pattern, raw_hs_code):
+    st.error("Invalid Format: HS Code can only contain digits and periods (e.g., 1234.56.78.90)")
+elif raw_hs_code not in (None, ""):
+    st.success("Input format is valid.")
 
 # Function to autoformat HS code to XXXX.XX.XX.XX
 def format_hs_code(code):
@@ -46,23 +55,37 @@ def format_hs_code(code):
 
 if raw_hs_code:
     formatted_code = format_hs_code(raw_hs_code)
-    st.info(f"Inputted HS Code: **{formatted_code}**")
+    st.info(f"Inputted HS Code: **{formatted_code}**\n")
 else:
     formatted_code = None
 
 # Attempt to autofill duty information based on HS code
 
 auto_duty = 0.00
+success = None
 
 if formatted_code:
     try:
+        # Retrieve path to combined json file
         script_dir = os.path.dirname(os.path.abspath(__file__))
         data_path = os.path.abspath(os.path.join(script_dir, '..', 'Data', 'combined_data.json'))
+
+        # the data file and defining data tuple
         with open(data_path, "r") as f:
             data = json.load(f)
         duty_info = find_duty_by_hscode(data, formatted_code)
-        auto_duty = duty_info.get("general")
-        st.success(f"Auto-filled Duty: {auto_duty}%")
+        print(duty_info)
+
+        # retrieving success code and duty percentage
+        success = duty_info.get("general")[0]
+        auto_duty = duty_info.get("general")[1]
+
+        # success code 0 means duty was found and is a float
+        # success code 1 means duty was found but is a string (e.g. a message)
+        if success == 0:
+            st.success(f"Auto-filled Duty: {auto_duty}%")
+        elif success == 1:
+            st.warning(f"Cannot Autofill duty, Message contained: **{auto_duty}** (Note: Message may be truncated)")
     except ValueError as e:
         st.error(str(e))
 
@@ -73,7 +96,11 @@ invoice_value = st.number_input("Invoice Value (USD)")
 brokerage = st.number_input("Brokerage (USD)")
 freight = st.number_input("Freight (USD)")
 
-duty_percent = st.number_input("Duty (%)", value=auto_duty, format="%.2f")
+if success == 0:
+    duty_percent = st.number_input("Duty (%)", value=auto_duty, format="%.2f")
+    st.caption("🔄 Autofilled from HS code lookup")
+else:
+    duty_percent = st.number_input("Duty (%)")
 tariff_percent = st.number_input("Tariff (%)")
 
 mpf_percent = st.number_input("Merchandise Processing Fee (%)", value=0.3464, format="%.4f")
