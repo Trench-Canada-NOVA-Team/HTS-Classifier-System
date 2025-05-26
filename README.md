@@ -103,6 +103,18 @@ The system includes a Tariff & Net Value Calculator (located in `TariffCalculato
 ### Formula Used
 
 The calculator uses the following formula:
+
+$$\begin{align}
+  \Large \text{Net Value} = \Large \frac{\text{Invoice Value} - \text{Brokerage} - \text{Freight}}{1 + \frac{1}{100} \cdot (\text{Duty%} + \text{MPF%} + \text{HMF%} + \text{Tariff%})} \\
+  \\
+  \Large \text{Tariff Amount} = \Large \text{Tariff%} \times \text{Net Value}
+\end{align}$$
+
+Where:
+- Duty and Tariff rates are given in percent (%)
+- MPF is the Merchandise Processing Fee percentage (0.3464%)
+- HMF is the Harbour Maintenance Fee percentage (0.125%)
+
 ```
 Net Value = (Invoice Value - Brokerage - Freight) / (1 + Duty% + MPF% + HMF% + Tariff%)
 Tariff Cost = Net Value × Tariff%
