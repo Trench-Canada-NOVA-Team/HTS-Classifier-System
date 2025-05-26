@@ -1,4 +1,7 @@
 import streamlit as st
+from json_search import find_duty_by_hscode
+import json
+import os
 
 def calculate_net_value(
     invoice_value,
@@ -43,7 +46,25 @@ def format_hs_code(code):
 
 if raw_hs_code:
     formatted_code = format_hs_code(raw_hs_code)
-    st.info(f"Formatted HS Code: **{formatted_code}**")
+    st.info(f"Inputted HS Code: **{formatted_code}**")
+else:
+    formatted_code = None
+
+# Attempt to autofill duty information based on HS code
+
+auto_duty = 0.00
+
+if formatted_code:
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        data_path = os.path.abspath(os.path.join(script_dir, '..', 'Data', 'combined_data.json'))
+        with open(data_path, "r") as f:
+            data = json.load(f)
+        duty_info = find_duty_by_hscode(data, formatted_code)
+        auto_duty = duty_info.get("general")
+        st.success(f"Auto-filled Duty: {auto_duty}%")
+    except ValueError as e:
+        st.error(str(e))
 
 # Mode of delivery dropdown
 mode = st.selectbox("Mode of Delivery", ["Ocean Freight", "Air Freight", "Land", "Other"])
@@ -52,7 +73,7 @@ invoice_value = st.number_input("Invoice Value (USD)")
 brokerage = st.number_input("Brokerage (USD)")
 freight = st.number_input("Freight (USD)")
 
-duty_percent = st.number_input("Duty (%)")
+duty_percent = st.number_input("Duty (%)", value=auto_duty, format="%.2f")
 tariff_percent = st.number_input("Tariff (%)")
 
 mpf_percent = st.number_input("Merchandise Processing Fee (%)", value=0.3464, format="%.4f")
