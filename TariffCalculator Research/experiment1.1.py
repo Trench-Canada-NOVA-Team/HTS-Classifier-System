@@ -35,9 +35,19 @@ def calculate_net_value(
         raise ValueError("Denominator is zero, check the input percentages.")
 
     net_value = numerator / denominator
-    tariff_cost = net_value * tariff
-    return net_value, tariff_cost
-
+    # Calculate individual fee amounts
+    mpf_amount = net_value * mpf
+    hmf_amount = net_value * hmf
+    duty_amount = net_value * duty
+    tariff_amount = net_value * tariff
+    
+    return {
+        'net_value': net_value,
+        'mpf_amount': mpf_amount,
+        'hmf_amount': hmf_amount,
+        'duty_amount': duty_amount,
+        'tariff_amount': tariff_amount
+    }
 
 st.title(" Tariff & Net Value Calculator")
 
@@ -175,8 +185,10 @@ if st.session_state.hs_code_list:
     st.session_state.hs_code_list = edited_df.to_dict('records')
     
     # Calculate and display total duty
+    total_tariff = sum(float(row['tariff_percent']) for row in st.session_state.hs_code_list if isinstance(row['tariff_percent'], (int, float)))
     total_duty = sum(float(row['duty_percent']) for row in st.session_state.hs_code_list if isinstance(row['duty_percent'], (int, float)))
     st.metric("Total Duty for Bill", f"{total_duty:.2f}%")
+    st.metric("Total Tariff for Bill", f"{total_tariff:.2f}%")
 
 mode = st.selectbox("Mode of Delivery", ["Ocean Freight", "Air Freight", "Land", "Other"])
 
@@ -195,11 +207,47 @@ else:
 
 if st.button("Calculate"):
     try:
-        net_value, tariff_cost = calculate_net_value(
+        result = calculate_net_value(
             invoice_value, brokerage, freight,
-            total_duty, mpf_percent, hmf_percent, tariff_percent
+            total_duty, mpf_percent, hmf_percent, total_tariff
         )
-        st.success(f" Net Value: ${net_value:,.2f}")
-        st.success(f" Tariff Cost: ${tariff_cost:,.2f}")
+        
+        # Display breakdown in the requested format
+        st.subheader("📊 Calculation Breakdown")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("Invoice Value", f"${invoice_value:,.2f}")
+            st.metric("Brokerage", f"${brokerage:,.2f}")
+            st.metric("Freight", f"${freight:,.2f}")
+            st.metric("MPF (HMF)", f"${result['mpf_amount'] + result['hmf_amount']:,.2f}")
+        
+        with col2:
+            st.metric(f"Duty **({total_duty}%)**", f"${result['duty_amount']:,.2f}", border=True)
+            st.metric(f"Tariff **({total_tariff}%)**", f"${result['tariff_amount']:,.2f}", border=True)
+            st.metric("**Net Value**", f"${result['net_value']:,.2f}", border=True)
+        
+        # Additional breakdown table
+        breakdown_data = {
+            'Component': ['Invoice Value', 'Brokerage', 'Freight', 'MPF', 'HMF', 'Duty', 'Tariff', 'Net Value'],
+            'Amount ($)': [
+                f"{invoice_value:,.2f}",
+                f"{brokerage:,.2f}",
+                f"{freight:,.2f}",
+                f"{result['mpf_amount']:,.2f}",
+                f"{result['hmf_amount']:,.2f}",
+                f"{result['duty_amount']:,.2f}",
+                f"{result['tariff_amount']:,.2f}",
+                f"{result['net_value']:,.2f}"
+            ]
+        }
+        
+        st.subheader("📋 Detailed Breakdown")
+        breakdown_df = pd.DataFrame(breakdown_data)
+        st.dataframe(breakdown_df, use_container_width=True)
+        
     except ValueError as e:
         st.error(str(e))
+    except NameError:
+        st.error("Please add at least one HS code to calculate duties and tariffs.")
