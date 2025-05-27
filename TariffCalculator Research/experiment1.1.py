@@ -3,6 +3,13 @@ from json_search import find_duty_by_hscode
 import json
 import os
 import re
+import pandas as pd
+
+# Initialize session state for HS code list and form counter
+if 'hs_code_list' not in st.session_state:
+    st.session_state.hs_code_list = []
+if 'form_counter' not in st.session_state:
+    st.session_state.form_counter = 0
 
 def calculate_net_value(
     invoice_value,
@@ -36,8 +43,13 @@ st.title(" Tariff & Net Value Calculator")
 
 st.subheader(" Input Values")
 
-# Input for HS Tariff Code
-raw_hs_code = st.text_input("HS Tariff Code", max_chars=13, help="Enter the HS Tariff Code (up to 13 characters).")
+# Input for HS Tariff Code - use form_counter to reset
+raw_hs_code = st.text_input(
+    "HS Tariff Code", 
+    max_chars=13, 
+    help="Enter the HS Tariff Code (up to 13 characters).",
+    key=f"raw_hs_code_{st.session_state.form_counter}"
+)
 
 allowed_chars_pattern = r"^[0-9. ]*$"
 
@@ -64,6 +76,20 @@ else:
 auto_duty = 0.00
 success = None
 
+duty_percent = st.number_input(
+    "Duty (%)",
+    format="%.2f",
+    help="Enter duty percentage manually if not autofilled",
+    key=f"duty_percent_{st.session_state.form_counter}"
+)
+
+tariff_percent = st.number_input(
+    "Tariff (%)",
+    format="%.2f",
+    help="Enter tariff percentage",
+    key=f"tariff_percent_{st.session_state.form_counter}"
+)
+
 if formatted_code:
     try:
         # Retrieve path to combined json file
@@ -83,25 +109,80 @@ if formatted_code:
         # success code 0 means duty was found and is a float
         # success code 1 means duty was found but is a string (e.g. a message)
         if success == 0:
+            st.caption("🔄 Autofilled from HS code lookup")
             st.success(f"Auto-filled Duty: {auto_duty}%")
+            # Update the duty_percent with auto_duty value
+            duty_percent = auto_duty
         elif success == 1:
             st.warning(f"Cannot Autofill duty, Message contained: **{auto_duty}** (Note: Message may be truncated)")
+
+        # Add button to add HS code to list
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("Add to List", key="add_hs"):
+                # Check if HS code already exists in list
+                existing_codes = [item['hs_code'] for item in st.session_state.hs_code_list]
+                if formatted_code not in existing_codes:
+                    duty_value = auto_duty if success == 0 else duty_percent
+                    st.session_state.hs_code_list.append({
+                        'hs_code': formatted_code,
+                        'duty_percent': duty_value,
+                        'tariff_percent': tariff_percent,
+                        'status': 'Auto-filled' if success == 0 else 'Manual'
+                    })
+                    st.success(f"Added {formatted_code} to list")
+            
+                    # Reset the form by incrementing the counter
+                    st.session_state.form_counter += 1
+                    st.rerun()
+                else:
+                    st.warning("HS Code already in list")
+        
+        with col2:
+            if st.button("Clear List", key="clear_list"):
+                st.session_state.hs_code_list = []
+                st.success("List cleared")
+
     except ValueError as e:
         st.error(str(e))
 
-# Mode of delivery dropdown
+# Display HS Code List
+if st.session_state.hs_code_list:
+    st.subheader("HS Code List")
+    
+    # Create DataFrame for display
+    df = pd.DataFrame(st.session_state.hs_code_list)
+    
+    # Add edit functionality
+    edited_df = st.data_editor(
+        df,
+        column_config={
+            "hs_code": "HS Code",
+            "duty_percent": st.column_config.NumberColumn(
+                "Duty %",
+                min_value=0.0,
+                max_value=100.0,
+                step=0.01,
+                format="%.2f"
+            ),
+            "status": "Status"
+        },
+        num_rows="dynamic",
+        use_container_width=True
+    )
+    
+    # Update session state with edited data
+    st.session_state.hs_code_list = edited_df.to_dict('records')
+    
+    # Calculate and display total duty
+    total_duty = sum(float(row['duty_percent']) for row in st.session_state.hs_code_list if isinstance(row['duty_percent'], (int, float)))
+    st.metric("Total Duty for Bill", f"{total_duty:.2f}%")
+
 mode = st.selectbox("Mode of Delivery", ["Ocean Freight", "Air Freight", "Land", "Other"])
 
 invoice_value = st.number_input("Invoice Value (USD)")
 brokerage = st.number_input("Brokerage (USD)")
 freight = st.number_input("Freight (USD)")
-
-if success == 0:
-    duty_percent = st.number_input("Duty (%)", value=auto_duty, format="%.2f")
-    st.caption("🔄 Autofilled from HS code lookup")
-else:
-    duty_percent = st.number_input("Duty (%)")
-tariff_percent = st.number_input("Tariff (%)")
 
 mpf_percent = st.number_input("Merchandise Processing Fee (%)", value=0.3464, format="%.4f")
 
@@ -116,7 +197,7 @@ if st.button("Calculate"):
     try:
         net_value, tariff_cost = calculate_net_value(
             invoice_value, brokerage, freight,
-            duty_percent, mpf_percent, hmf_percent, tariff_percent
+            total_duty, mpf_percent, hmf_percent, tariff_percent
         )
         st.success(f" Net Value: ${net_value:,.2f}")
         st.success(f" Tariff Cost: ${tariff_cost:,.2f}")
