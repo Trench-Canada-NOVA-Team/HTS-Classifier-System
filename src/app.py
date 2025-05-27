@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 from pathlib import Path
 from data_loader.json_loader import HTSDataLoader
@@ -22,6 +23,27 @@ def get_source_data(data_loader, hts_code):
         if entry.get('htsno', '').startswith(hts_code[:6]):
             matches.append(entry)
     return matches
+
+# Add this function at the top with other helper functions
+def format_hs_code(code):
+    """Format HS code to XXXX.XX.XX.XX format"""
+    if not code:
+        return code
+    # Remove all non-digits
+    digits = ''.join(filter(str.isdigit, code))
+    # Limit to 10 digits (standard HTS format)
+    digits = digits[:10]
+    # Format as XXXX.XX.XX.XX
+    if len(digits) >= 4:
+        formatted = digits[:4]
+        if len(digits) >= 6:
+            formatted += '.' + digits[4:6]
+        if len(digits) >= 8:
+            formatted += '.' + digits[6:8]
+        if len(digits) >= 10:
+            formatted += '.' + digits[8:10]
+        return formatted
+    return digits
 
 # Set page config
 st.set_page_config(
@@ -94,6 +116,10 @@ try:
                     try:
                         results = classifier.classify(description)
                         
+                        # Store results and description in session state
+                        st.session_state.classification_results = results
+                        st.session_state.classification_description = description
+                        
                         # Display results
                         st.subheader("Classification Results")
                         
@@ -119,63 +145,115 @@ try:
                                         **Description:** {match.get('description', 'N/A')}
                                         ---
                                         """)
-                        
-                        # Feedback section in a form
-                        with st.form(key="feedback_form"):
-                            st.subheader("📝 Provide Feedback")
-                            is_correct = st.radio(
-                                "Is the top prediction correct?",
-                                ["Yes", "No"],
-                                key="feedback_choice"
-                            )
-                            
-                            # Only show correct code input if "No" is selected
-                            correct_code = None
-                            if is_correct == "No":
-                                correct_code = st.text_input(
-                                    "Please provide the correct HTS code:",
-                                    key="correct_code_input"
-                                )
-                            
-                            # Submit button
-                            submit_feedback = st.form_submit_button("Submit Feedback")
-                            
-                            if submit_feedback:
-                                try:
-                                    if is_correct == "Yes":
-                                        # Use predicted code as correct code
-                                        logger.info(f"Adding positive feedback for prediction {results[0]['hts_code']}")
-                                        classifier.add_feedback(
-                                            product_description=description,
-                                            predicted_code=results[0]['hts_code'],
-                                            correct_code=results[0]['hts_code'],
-                                            confidence_score=results[0]['confidence']
-                                        )
-                                        st.success("✅ Thank you! Prediction marked as correct!")
-                                        time.sleep(1)  # Give time for the message to be seen
-                                        st.experimental_rerun()
-                                    else:  # No
-                                        if not correct_code:
-                                            st.error("⚠️ Please enter the correct HTS code.")
-                                        else:
-                                            logger.info(f"Adding correction feedback: {results[0]['hts_code']} -> {correct_code}")
-                                            classifier.add_feedback(
-                                                product_description=description,
-                                                predicted_code=results[0]['hts_code'],
-                                                correct_code=correct_code,
-                                                confidence_score=results[0]['confidence']
-                                            )
-                                            st.success(f"✅ Thank you! Corrected to {correct_code}")
-                                            time.sleep(1)  # Give time for the message to be seen
-                                            st.experimental_rerun()
-                                except Exception as e:
-                                    logger.error(f"Error saving feedback: {str(e)}")
-                                    st.error(f"Error saving feedback: {str(e)}")
 
                     except Exception as e:
                         st.error(f"An error occurred during classification: {str(e)}")
             else:
                 st.warning("Please enter a product description.")
+        
+        # Move the feedback form OUTSIDE the classify button block
+        # Check if we have results in session state to show the feedback form
+        if 'classification_results' in st.session_state and st.session_state.classification_results:
+            # Feedback section in a form
+            with st.form(key="feedback_form"):
+                st.subheader("📝 Provide Feedback")
+                
+                # Define the regex pattern at the top
+                allowed_chars_pattern = r"^\d{4}(?:\.\d{2}){0,3}$"
+                
+                is_correct = st.radio(
+                    "Is the top prediction correct?",
+                    ["Yes", "No"],
+                    key="feedback_choice"
+                )
+                
+                # # Only show correct code input if "No" is selected
+                # correct_code = None
+                # if is_correct == "No":
+                #     correct_code = st.text_input(
+                #         "Please provide the correct HTS code:",
+                #         max_chars=13,
+                #         help="Enter the correct HTS code (up to 13 characters).",
+                #         key="correct_code_input"
+                #     )
+                    
+                #     # Add regex validation here
+                #     if correct_code and not re.match(allowed_chars_pattern, correct_code):
+                #         st.error("Invalid Format: HS Code can only contain digits and periods (e.g., 1234.56.78.90)")
+                #     elif correct_code not in (None, ""):
+                #         st.success("Input format is valid.")
+                
+                # Submit button
+                submit_feedback = st.form_submit_button("Submit Feedback")
+                
+                if submit_feedback:
+                    print("Submitting feedback...")
+                    try:
+                        # Get results and description from session state
+                        results = st.session_state.classification_results
+                        description = st.session_state.classification_description
+                        
+                        if is_correct == "Yes":
+                            # Use predicted code as correct code
+                            logger.info(f"Adding positive feedback for prediction {results[0]['hts_code']}")
+                            print(f"Adding positive feedback for prediction {results[0]['hts_code']}")
+                            classifier.add_feedback(
+                                product_description=description,
+                                predicted_code=results[0]['hts_code'],
+                                correct_code=results[0]['hts_code']
+                                # Remove confidence_score parameter
+                            )
+                            st.success("✅ Thank you! Prediction marked as correct!")
+                            
+                            # Clear the session state after successful feedback
+                            del st.session_state.classification_results
+                            del st.session_state.classification_description
+                            
+                            time.sleep(1)
+                            st.rerun()
+                        else:  # No
+                             # Only show correct code input if "No" is selected
+                            # correct_code = None
+                            correct_code = st.text_input(
+                                "Please provide the correct HTS code:",
+                                max_chars=13,
+                                help="Enter the correct HTS code (up to 13 characters).",
+                                key="correct_code_input"
+                            )
+                            
+                            # Add regex validation here
+                            if correct_code and not re.match(allowed_chars_pattern, correct_code):
+                                st.error("Invalid Format: HS Code can only contain digits and periods (e.g., 1234.56.78.90)")
+                            elif correct_code not in (None, ""):
+                                st.success("Input format is valid.")
+
+                            if not correct_code:
+                                st.error("⚠️ Please enter the correct HTS code.")
+                            elif correct_code and not re.match(allowed_chars_pattern, correct_code):
+                                st.error("⚠️ Invalid format: HS Code can only contain digits and periods.")
+                            else:
+                                # Format the correct code before using it
+                                formatted_correct_code = format_hs_code(correct_code)
+                                
+                                logger.info(f"Adding correction feedback: {results[0]['hts_code']} -> {formatted_correct_code}")
+                                print(f"Adding correction feedback: {results[0]['hts_code']} -> {formatted_correct_code}")
+                                classifier.add_feedback(
+                                    product_description=description,
+                                    predicted_code=results[0]['hts_code'],
+                                    correct_code=formatted_correct_code
+                                    # Remove confidence_score parameter
+                                )
+                                st.success(f"✅ Thank you! Corrected to {formatted_correct_code}")
+                                
+                                # Clear the session state after successful feedback
+                                del st.session_state.classification_results
+                                del st.session_state.classification_description
+                            
+                                time.sleep(1)
+                                st.rerun()
+                    except Exception as e:
+                        logger.error(f"Error saving feedback: {str(e)}")
+                        st.error(f"Error saving feedback: {str(e)}")
     
     with col2:
         st.subheader("Feedback Statistics")
@@ -194,9 +272,9 @@ try:
                 ---
                 **Description:** {entry['description'][:50]}...  
                 **Predicted:** {entry['predicted_code']}  
-                **Actual:** {entry['correct_code']}  
-                **Confidence:** {entry['confidence_score']}%
+                **Actual:** {entry['correct_code']}
                 """)
+                
         else:
             st.info("No feedback entries yet.")
             

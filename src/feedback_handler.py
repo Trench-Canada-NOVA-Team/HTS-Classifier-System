@@ -25,7 +25,7 @@ class FeedbackHandler:
             self.feedback_file.parent.mkdir(parents=True, exist_ok=True)
             # Create CSV with headers
             df = pd.DataFrame(columns=['timestamp', 'description', 'predicted_code', 
-                                     'correct_code', 'confidence_score'])
+                                     'correct_code'])
             df.to_csv(self.feedback_file, index=False)
             logger.info(f"Created new feedback file at {self.feedback_file}")
     
@@ -36,21 +36,21 @@ class FeedbackHandler:
         except Exception as e:
             logger.warning(f"Error reading feedback file: {str(e)}. Creating new one.")
             return pd.DataFrame(columns=['timestamp', 'description', 'predicted_code', 
-                                      'correct_code', 'confidence_score'])
+                                      'correct_code'])
     
     def _save_feedback_data(self, df):
         """Save feedback data to CSV file."""
         df.to_csv(self.feedback_file, index=False)
     
-    def add_feedback(self, description, predicted_code, correct_code, confidence_score):
+    def add_feedback(self, description, predicted_code, correct_code):
         """Add new feedback entry.
         
         Args:
             description (str): Original product description
             predicted_code (str): HTS code predicted by the classifier
             correct_code (str): Correct HTS code provided by user
-            confidence_score (float): Confidence score of the prediction
         """
+        print("Adding feedback...")
         df = self._load_feedback_data()
         
         new_entry = pd.DataFrame([{
@@ -58,7 +58,6 @@ class FeedbackHandler:
             "description": description,
             "predicted_code": predicted_code,
             "correct_code": correct_code,
-            "confidence_score": confidence_score
         }])
         
         # Append new entry to existing data
@@ -88,7 +87,6 @@ class FeedbackHandler:
                 'description': row['description'],
                 'predicted_code': row['predicted_code'],
                 'correct_code': row['correct_code'],
-                'confidence_score': row['confidence_score']
             })
         
         return {
@@ -96,3 +94,8 @@ class FeedbackHandler:
             "accuracy": correct / total if total > 0 else 0,
             "recent_entries": recent_entries
         }
+    
+    def format_hs_code(code):
+        digits = ''.join(filter(str.isdigit, code))[:12]  # remove non-digits, limit to 12 chars
+        sections = [digits[i:j] for i, j in [(0, 4), (4, 6), (6, 8), (8, 10)] if i < len(digits)]
+        return '.'.join(sections)

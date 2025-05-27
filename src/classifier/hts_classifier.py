@@ -394,21 +394,19 @@ Example confidence scores:
             logger.error(f"Error in classification: {str(e)}")
             raise
             
-    def add_feedback(self, product_description: str, predicted_code: str, correct_code: str, confidence_score: float):
+    def add_feedback(self, product_description: str, predicted_code: str, correct_code: str):
         """Add feedback for a classification prediction.
         
         Args:
             product_description (str): The original product description
             predicted_code (str): The HTS code predicted by the classifier
             correct_code (str): The correct HTS code provided by user
-            confidence_score (float): The confidence score of the prediction
         """
         try:
             self.feedback_handler.add_feedback(
                 description=product_description,
                 predicted_code=predicted_code,
-                correct_code=correct_code,
-                confidence_score=confidence_score
+                correct_code=correct_code
             )
             logger.info(f"Feedback recorded: {predicted_code} -> {correct_code}")
         except Exception as e:
@@ -417,3 +415,7 @@ Example confidence scores:
     def get_feedback_stats(self):
         """Get statistics about classification feedback."""
         return self.feedback_handler.get_feedback_stats()
+    
+    def format_hs_code(self, hts_code: str) -> str:
+        """Format HTS code to standard 10-digit format."""
+        return self.feedback_handler.format_hs_code(hts_code)
