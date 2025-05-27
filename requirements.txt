@@ -19,3 +19,4 @@ typing-extensions>=4.0.0
 
 # Data processing
 json5>=0.9.0
+-e .
