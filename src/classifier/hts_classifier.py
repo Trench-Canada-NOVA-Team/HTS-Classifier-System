@@ -1,6 +1,5 @@
 from typing import Dict, List, Tuple
 import numpy as np
-import faiss
 import pickle
 import time
 from loguru import logger
@@ -8,6 +7,8 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI, APIError, RateLimitError
+from pinecone.grpc import PineconeGRPC as Pinecone
+from pinecone import ServerlessSpec
 from data_loader.json_loader import HTSDataLoader
 from preprocessor.text_processor import TextPreprocessor
 from feedback_handler import FeedbackHandler
@@ -17,7 +18,6 @@ class HTSClassifier:
         """Initialize the HTS classifier."""
         self.data_loader = data_loader
         self.preprocessor = preprocessor
-        self.index = None
         self.descriptions = []
         self.hts_codes = []
         self.cache_dir = Path(__file__).parent.parent.parent / "cache"
@@ -28,10 +28,17 @@ class HTSClassifier:
         
         # Initialize OpenAI client
         load_dotenv()
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=openai_api_key)
+        
+        # Initialize Pinecone client
+        pinecone_api_key = os.getenv('PINECONE_API_KEY')
+        if not pinecone_api_key:
+            raise ValueError("PINECONE_API_KEY not found in environment variables")
+        self.pc = Pinecone(api_key=pinecone_api_key)
+        self.index_name = "hts-codes"
         
     def _get_cache_path(self) -> Path:
         """Get the path for the embeddings cache file."""
@@ -66,9 +73,9 @@ class HTSClassifier:
             logger.warning(f"Failed to save cache: {str(e)}")
     
     def build_index(self):
-        """Build the FAISS index for similarity search."""
+        """Build the Pinecone index for similarity search."""
         try:
-            # Try to load from cache first
+            # Try to load from cache first for local embeddings
             embeddings, cached_descriptions, cached_codes = self._load_cached_embeddings()
             
             if embeddings is None:
@@ -99,17 +106,182 @@ class HTSClassifier:
                 self.descriptions = cached_descriptions
                 self.hts_codes = cached_codes
             
-            # Build FAISS index
-            dimension = embeddings.shape[1]
-            self.index = faiss.IndexFlatL2(dimension)
-            self.index.add(embeddings.astype('float32'))
+            # Create Pinecone index if it doesn't exist
+            if self.index_name not in self.pc.list_indexes().names():
+                logger.info("Creating new Pinecone index...")
+                self.pc.create_index(
+                    name=self.index_name,
+                    dimension=embeddings.shape[1],
+                    metric="cosine",
+                    spec=ServerlessSpec(
+                        cloud="aws",
+                        region="us-east-1"
+                    )
+                )
             
-            logger.info("Successfully built FAISS index")
+            # Get the index
+            index = self.pc.Index(self.index_name)
+            
+            # Check if vectors already exist in Pinecone
+            stats = index.describe_index_stats()
+            if stats.total_vector_count == 0:
+                logger.info("Uploading vectors to Pinecone...")
+                # Create vector data with IDs and metadata
+                vectors = []
+                for i, (embedding, description, hts_code) in enumerate(zip(embeddings, self.descriptions, self.hts_codes)):
+                    vectors.append({
+                        'id': str(i),
+                        'values': embedding.tolist(),
+                        'metadata': {
+                            'description': description,
+                            'hts_code': hts_code
+                        }
+                    })
+                
+                # Upsert vectors in batches
+                batch_size = 100
+                for i in range(0, len(vectors), batch_size):
+                    batch = vectors[i:i + batch_size]
+                    index.upsert(vectors=batch)
+                logger.info("Successfully uploaded vectors to Pinecone")
+            else:
+                logger.info(f"Using existing Pinecone index with {stats.total_vector_count} vectors")
             
         except Exception as e:
             logger.error(f"Error building index: {str(e)}")
             raise
+
+    def classify(self, product_description: str, top_k: int = 3, country_code: str = None) -> List[Dict]:
+        """Classify a product description into HTS codes with country-specific rates."""
+        try:
+            # First check explicit product mappings
+            matching_codes = self.data_loader.find_matching_codes(product_description)
+            results = []
             
+            if matching_codes:
+                for code in matching_codes:
+                    # Find the most specific matching code in our data
+                    specific_codes = [hts for hts in self.hts_codes if hts.startswith(code)]
+                    if specific_codes:
+                        # Sort by length to get most specific match
+                        specific_code = sorted(specific_codes, key=len, reverse=True)[0]
+                        
+                        hts_info = self.data_loader.get_hts_code_info(specific_code)
+                        hts_info['hts_code'] = specific_code
+                        
+                        # Get country-specific rate information
+                        rate_info = {}
+                        if country_code:
+                            rate_info = self.data_loader.get_country_specific_rate(specific_code, country_code)
+                        
+                        # Validate with GPT for confidence score
+                        confidence = self.validate_with_gpt(product_description, hts_info)
+                        
+                        if confidence > 80:  # Higher threshold for mapped codes
+                            result = {
+                                'hts_code': specific_code,
+                                'description': hts_info.get('description', ''),
+                                'confidence': round(confidence, 2),
+                                'general_rate': hts_info.get('general', 'N/A'),
+                                'units': hts_info.get('units', []),
+                                'chapter_context': self.get_chapter_context(specific_code)
+                            }
+                            
+                            # Add country-specific rate information if available
+                            if rate_info:
+                                result.update({
+                                    'country_specific_rate': rate_info.get('rate'),
+                                    'trade_agreement': rate_info.get('trade_agreement'),
+                                    'country_name': rate_info.get('country_name')
+                                })
+                            
+                            results.append(result)
+            
+            if results:
+                # Sort by confidence and return top matches
+                results.sort(key=lambda x: x['confidence'], reverse=True)
+                return results[:top_k]
+            
+            # If no mapping matches or not enough results, use similarity search
+            clean_query = self.preprocessor.clean_text(product_description)
+            query_embedding = self.preprocessor.encode_text([clean_query])
+            
+            # Get Pinecone index
+            index = self.pc.Index(self.index_name)
+            
+            # Search index with more candidates
+            k_multiplier = 5
+            search_results = index.query(
+                vector=query_embedding[0].tolist(),
+                top_k=top_k * k_multiplier,
+                include_metadata=True
+            )
+            
+            # Prepare results with GPT validation
+            seen_chapters = set()
+            
+            # Dynamic threshold based on product type
+            clean_query_lower = clean_query.lower()
+            base_threshold = 20
+            category_42_threshold = 10
+            apparel_threshold = 15
+            aluminum_threshold = 15
+            
+            for match in search_results.matches:
+                hts_code = match.metadata['hts_code']
+                chapter = hts_code[:2] if len(hts_code) >= 2 else ""
+                
+                if chapter in seen_chapters and len(results) >= top_k:
+                    continue
+                
+                # Determine confidence threshold
+                threshold = base_threshold
+                if "leather" in clean_query_lower and chapter == "42":
+                    threshold = category_42_threshold
+                elif any(word in clean_query_lower for word in ["t-shirt", "shirt", "sweater"]) and chapter in ["61", "62"]:
+                    threshold = apparel_threshold
+                elif "window" in clean_query_lower and "aluminum" in clean_query_lower and chapter == "76":
+                    threshold = aluminum_threshold
+                
+                hts_info = self.data_loader.get_hts_code_info(hts_code)
+                hts_info['hts_code'] = hts_code
+                
+                # Get country-specific rate information
+                rate_info = {}
+                if country_code:
+                    rate_info = self.data_loader.get_country_specific_rate(hts_code, country_code)
+                
+                confidence = self.validate_with_gpt(product_description, hts_info)
+                
+                if confidence > threshold:
+                    result = {
+                        'hts_code': hts_code,
+                        'description': match.metadata['description'],
+                        'confidence': round(confidence, 2),
+                        'general_rate': hts_info.get('general', 'N/A'),
+                        'units': hts_info.get('units', []),
+                        'chapter_context': self.get_chapter_context(hts_code)
+                    }
+                    
+                    # Add country-specific rate information if available
+                    if rate_info:
+                        result.update({
+                            'country_specific_rate': rate_info.get('rate'),
+                            'trade_agreement': rate_info.get('trade_agreement'),
+                            'country_name': rate_info.get('country_name')
+                        })
+                    
+                    results.append(result)
+                    seen_chapters.add(chapter)
+            
+            # Sort by confidence and return top_k
+            results.sort(key=lambda x: x['confidence'], reverse=True)
+            return results[:top_k]
+            
+        except Exception as e:
+            logger.error(f"Error in classification: {str(e)}")
+            raise
+
     def get_chapter_context(self, hts_code: str) -> str:
         """Get the context of the HTS chapter and subchapter for better classification."""
         if len(hts_code) >= 4:
@@ -161,9 +333,9 @@ class HTSClassifier:
             if context and subcontext:
                 return f"{context} - {subcontext}"
             return context or subcontext
-            
-        return ""
         
+        return ""
+
     def validate_with_gpt(self, product_description: str, hts_info: Dict, max_retries: int = 3) -> float:
         """Use GPT to validate the match and calculate confidence score with retry logic."""
         retry_count = 0
@@ -258,150 +430,9 @@ Example confidence scores:
             except Exception as e:
                 logger.error(f"Error validating with GPT: {str(e)}")
                 return 50.0
-                
-    def classify(self, product_description: str, top_k: int = 3, country_code: str = None) -> List[Dict]:
-        """Classify a product description into HTS codes with country-specific rates.
-        
-        Args:
-            product_description (str): The product to classify
-            top_k (int): Number of top results to return
-            country_code (str): Optional two-letter country code for specific rates
-        """
-        try:
-            if not self.index:
-                raise ValueError("Index not built. Call build_index() first")
-                
-            # First check explicit product mappings
-            matching_codes = self.data_loader.find_matching_codes(product_description)
-            if matching_codes:
-                results = []
-                for code in matching_codes:
-                    # Find the most specific matching code in our data
-                    specific_codes = [hts for hts in self.hts_codes if hts.startswith(code)]
-                    if specific_codes:
-                        # Sort by length to get most specific match
-                        specific_code = sorted(specific_codes, key=len, reverse=True)[0]
-                        hts_info = self.data_loader.get_hts_code_info(specific_code)
-                        hts_info['hts_code'] = specific_code
-                        
-                        # Get country-specific rate information
-                        rate_info = {}
-                        if country_code:
-                            rate_info = self.data_loader.get_country_specific_rate(specific_code, country_code)
-                        
-                        # Validate with GPT for confidence score
-                        confidence = self.validate_with_gpt(product_description, hts_info)
-                        if confidence > 80:  # Higher threshold for mapped codes
-                            result = {
-                                'hts_code': specific_code,
-                                'description': hts_info.get('description', ''),
-                                'confidence': round(confidence, 2),
-                                'general_rate': hts_info.get('general', 'N/A'),
-                                'units': hts_info.get('units', []),
-                                'chapter_context': self.get_chapter_context(specific_code)
-                            }
-                            
-                            # Add country-specific rate information if available
-                            if rate_info:
-                                result.update({
-                                    'country_specific_rate': rate_info.get('rate'),
-                                    'trade_agreement': rate_info.get('trade_agreement'),
-                                    'country_name': rate_info.get('country_name')
-                                })
-                                
-                            results.append(result)
-                
-                if results:
-                    # Sort by confidence and return top matches
-                    results.sort(key=lambda x: x['confidence'], reverse=True)
-                    return results[:top_k]
-            
-            # If no mapping matches or not enough results, use similarity search
-            clean_query = self.preprocessor.clean_text(product_description)
-            query_embedding = self.preprocessor.encode_text([clean_query])
-            
-            # Search index with more candidates
-            k_multiplier = 5
-            distances, indices = self.index.search(query_embedding.astype('float32'), top_k * k_multiplier)
-            
-            # Prepare results with GPT validation
-            results = []
-            seen_chapters = set()
-            
-            # Dynamic threshold based on product type
-            clean_query_lower = clean_query.lower()
-            base_threshold = 20
-            
-            if "leather" in clean_query_lower and any(word in clean_query_lower for word in ["wallet", "handbag", "bag", "case"]):
-                category_42_threshold = 10
-            elif any(word in clean_query_lower for word in ["t-shirt", "shirt", "sweater", "clothing"]):
-                apparel_threshold = 15
-            elif "window" in clean_query_lower and "aluminum" in clean_query_lower:
-                aluminum_threshold = 15
-            
-            for idx in indices[0]:
-                hts_code = self.hts_codes[idx]
-                chapter = hts_code[:2] if len(hts_code) >= 2 else ""
-                
-                if chapter in seen_chapters and len(results) >= top_k:
-                    continue
-                    
-                # Determine confidence threshold
-                threshold = base_threshold
-                if "leather" in clean_query_lower and chapter == "42":
-                    threshold = category_42_threshold
-                elif any(word in clean_query_lower for word in ["t-shirt", "shirt", "sweater"]) and chapter in ["61", "62"]:
-                    threshold = apparel_threshold
-                elif "window" in clean_query_lower and "aluminum" in clean_query_lower and chapter == "76":
-                    threshold = aluminum_threshold
-                
-                hts_info = self.data_loader.get_hts_code_info(hts_code)
-                hts_info['hts_code'] = hts_code
-                
-                # Get country-specific rate information
-                rate_info = {}
-                if country_code:
-                    rate_info = self.data_loader.get_country_specific_rate(hts_code, country_code)
-                
-                confidence = self.validate_with_gpt(product_description, hts_info)
-                
-                if confidence > threshold:
-                    result = {
-                        'hts_code': hts_code,
-                        'description': self.descriptions[idx],
-                        'confidence': round(confidence, 2),
-                        'general_rate': hts_info.get('general', 'N/A'),
-                        'units': hts_info.get('units', []),
-                        'chapter_context': self.get_chapter_context(hts_code)
-                    }
-                    
-                    # Add country-specific rate information if available
-                    if rate_info:
-                        result.update({
-                            'country_specific_rate': rate_info.get('rate'),
-                            'trade_agreement': rate_info.get('trade_agreement'),
-                            'country_name': rate_info.get('country_name')
-                        })
-                        
-                    results.append(result)
-                    seen_chapters.add(chapter)
-            
-            # Sort by confidence and return top_k
-            results.sort(key=lambda x: x['confidence'], reverse=True)
-            return results[:top_k]
-            
-        except Exception as e:
-            logger.error(f"Error in classification: {str(e)}")
-            raise
-            
+
     def add_feedback(self, product_description: str, predicted_code: str, correct_code: str):
-        """Add feedback for a classification prediction.
-        
-        Args:
-            product_description (str): The original product description
-            predicted_code (str): The HTS code predicted by the classifier
-            correct_code (str): The correct HTS code provided by user
-        """
+        """Add feedback for a classification prediction."""
         try:
             self.feedback_handler.add_feedback(
                 description=product_description,
