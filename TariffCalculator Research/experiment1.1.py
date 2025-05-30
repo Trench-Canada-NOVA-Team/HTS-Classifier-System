@@ -10,6 +10,11 @@ if 'hs_code_list' not in st.session_state:
     st.session_state.hs_code_list = []
 if 'form_counter' not in st.session_state:
     st.session_state.form_counter = 0
+# Add persistent user info (separate from form counter)
+if 'user_email' not in st.session_state:
+    st.session_state.user_email = ""
+if 'order_number' not in st.session_state:
+    st.session_state.order_number = ""
 
 def calculate_net_value(
     invoice_value,
@@ -49,16 +54,64 @@ def calculate_net_value(
         'tariff_amount': tariff_amount
     }
 
-st.title(" Tariff & Net Value Calculator")
+st.title("🚢 Tariff & Net Value Calculator")
 
-st.subheader(" Input Values")
+# User Information Section - PERSISTENT (not tied to form_counter)
+st.subheader("👤 User Information")
+col1, col2 = st.columns(2)
 
-# Input for HS Tariff Code - use form_counter to reset
+with col1:
+    user_email = st.text_input(
+        "User Email", 
+        value=st.session_state.user_email,  # Use session state value
+        placeholder="user@company.com",
+        key="persistent_user_email"  # Fixed key, not tied to form_counter
+    )
+    # Update session state when input changes
+    st.session_state.user_email = user_email
+
+with col2:
+    order_number = st.text_input(
+        "Order Number", 
+        value=st.session_state.order_number,  # Use session state value
+        placeholder="ORD-123456",
+        key="persistent_order_number"  # Fixed key, not tied to form_counter
+    )
+    # Update session state when input changes
+    st.session_state.order_number = order_number
+
+# Email validation
+if user_email and "@" not in user_email:
+    st.error("Please enter a valid email address")
+elif user_email:
+    st.success("✅ Valid email format")
+
+# Add a "Start New Order" button to reset user info when needed
+if st.button("🔄 Start New Order", help="Clear user info and start fresh"):
+    st.session_state.user_email = ""
+    st.session_state.order_number = ""
+    st.session_state.hs_code_list = []
+    st.session_state.form_counter = 0
+    st.rerun()
+
+st.divider()  # Visual separator
+
+st.subheader("📦 Input Values")
+
+# Country of Origin and HS Code inputs - THESE reset with form_counter
+country_of_origin = st.selectbox(
+    "Country of Origin",
+    options=["", "Canada", "China", "US", "Italy", "France", "Germany"],
+    index=0,
+    help="Select the country where the goods were manufactured or produced",
+    key=f"country_of_origin_{st.session_state.form_counter}"  # This resets
+)
+
 raw_hs_code = st.text_input(
     "HS Tariff Code", 
     max_chars=13, 
     help="Enter the HS Tariff Code (up to 13 characters).",
-    key=f"raw_hs_code_{st.session_state.form_counter}"
+    key=f"raw_hs_code_{st.session_state.form_counter}"  # This resets
 )
 
 allowed_chars_pattern = r"^[0-9. ]*$"
@@ -90,14 +143,14 @@ duty_percent = st.number_input(
     "Duty (%)",
     format="%.2f",
     help="Enter duty percentage manually if not autofilled",
-    key=f"duty_percent_{st.session_state.form_counter}"
+    key=f"duty_percent_{st.session_state.form_counter}"  # This resets
 )
 
 tariff_percent = st.number_input(
     "Tariff (%)",
     format="%.2f",
     help="Enter tariff percentage",
-    key=f"tariff_percent_{st.session_state.form_counter}"
+    key=f"tariff_percent_{st.session_state.form_counter}"  # This resets
 )
 
 if formatted_code:
@@ -130,23 +183,36 @@ if formatted_code:
         col1, col2 = st.columns([1, 1])
         with col1:
             if st.button("Add to List", key="add_hs"):
-                # Check if HS code already exists in list
-                existing_codes = [item['hs_code'] for item in st.session_state.hs_code_list]
-                if formatted_code not in existing_codes:
-                    duty_value = auto_duty if success == 0 else duty_percent
-                    st.session_state.hs_code_list.append({
-                        'hs_code': formatted_code,
-                        'duty_percent': duty_value,
-                        'tariff_percent': tariff_percent,
-                        'status': 'Auto-filled' if success == 0 else 'Manual'
-                    })
-                    st.success(f"Added {formatted_code} to list")
-            
-                    # Reset the form by incrementing the counter
-                    st.session_state.form_counter += 1
-                    st.rerun()
+                # Validate required fields before adding
+                if not st.session_state.user_email:  # Use session state
+                    st.error("⚠️ Please enter user email before adding to list")
+                elif not st.session_state.order_number:  # Use session state
+                    st.error("⚠️ Please enter order number before adding to list")
+                elif "@" not in st.session_state.user_email:  # Use session state
+                    st.error("⚠️ Please enter a valid email address")
+                elif not country_of_origin:
+                    st.error("⚠️ Please select a country of origin")
                 else:
-                    st.warning("HS Code already in list")
+                    # Check if HS code already exists in list
+                    existing_codes = [item['hs_code'] for item in st.session_state.hs_code_list]
+                    if formatted_code not in existing_codes:
+                        duty_value = auto_duty if success == 0 else duty_percent
+                        st.session_state.hs_code_list.append({
+                            'hs_code': formatted_code,
+                            'duty_percent': duty_value,
+                            'tariff_percent': tariff_percent,
+                            'status': 'Auto-filled' if success == 0 else 'Manual',
+                            'user_email': st.session_state.user_email,  # Use session state
+                            'order_number': st.session_state.order_number,  # Use session state
+                            'country_of_origin': country_of_origin
+                        })
+                        st.success(f"Added {formatted_code} from {country_of_origin} to list for order {st.session_state.order_number}")
+                
+                        # Reset only the HS code form fields, NOT user info
+                        st.session_state.form_counter += 1
+                        st.rerun()
+                    else:
+                        st.warning("HS Code already in list")
         
         with col2:
             if st.button("Clear List", key="clear_list"):
@@ -160,12 +226,18 @@ if formatted_code:
 if st.session_state.hs_code_list:
     st.subheader("HS Code List")
     
-    # Create DataFrame for display
+    # Create DataFrame for display - exclude user info columns
     df = pd.DataFrame(st.session_state.hs_code_list)
+    
+    # Select only the columns we want to display
+    display_columns = ['hs_code', 'duty_percent', 'tariff_percent', 'country_of_origin', 'status']
+    df_display = df[display_columns]
+    
+    print(st.session_state.hs_code_list)
     
     # Add edit functionality
     edited_df = st.data_editor(
-        df,
+        df_display,  # Use the filtered dataframe
         column_config={
             "hs_code": "HS Code",
             "duty_percent": st.column_config.NumberColumn(
@@ -175,14 +247,32 @@ if st.session_state.hs_code_list:
                 step=0.01,
                 format="%.2f"
             ),
+            "tariff_percent": st.column_config.NumberColumn(
+                "Tariff %",
+                min_value=0.0,
+                max_value=100.0,
+                step=0.01,
+                format="%.2f"
+            ),
+            "country_of_origin": st.column_config.SelectboxColumn(
+                "Country of Origin",
+                options=["Canada", "China", "US", "Italy", "France", "Germany"]
+            ),
             "status": "Status"
         },
         num_rows="dynamic",
         use_container_width=True
     )
     
-    # Update session state with edited data
-    st.session_state.hs_code_list = edited_df.to_dict('records')
+    # Update session state with edited data, preserving user info
+    for i, edited_row in edited_df.iterrows():
+        if i < len(st.session_state.hs_code_list):
+            # Update only the editable fields, keep user info intact
+            st.session_state.hs_code_list[i]['hs_code'] = edited_row['hs_code']
+            st.session_state.hs_code_list[i]['duty_percent'] = edited_row['duty_percent']
+            st.session_state.hs_code_list[i]['tariff_percent'] = edited_row['tariff_percent']
+            st.session_state.hs_code_list[i]['country_of_origin'] = edited_row['country_of_origin']
+            st.session_state.hs_code_list[i]['status'] = edited_row['status']
     
     # Calculate and display total duty
     total_tariff = sum(float(row['tariff_percent']) for row in st.session_state.hs_code_list if isinstance(row['tariff_percent'], (int, float)))
@@ -190,11 +280,13 @@ if st.session_state.hs_code_list:
     st.metric("Total Duty for Bill", f"{total_duty:.2f}%")
     st.metric("Total Tariff for Bill", f"{total_tariff:.2f}%")
 
+st.divider()  # Visual separator
+
 mode = st.selectbox("Mode of Delivery", ["Ocean Freight", "Air Freight", "Land", "Other"])
 
-invoice_value = st.number_input("Invoice Value (USD)")
+invoice_value = st.number_input("Commercial Invoice Value (USD)")
 brokerage = st.number_input("Brokerage (USD)")
-freight = st.number_input("Freight (USD)")
+freight = st.number_input("Total Pre-paid Freight (USD)")
 
 mpf_percent = st.number_input("Merchandise Processing Fee (%)", value=0.3464, format="%.4f")
 
@@ -206,48 +298,52 @@ else:
 
 
 if st.button("Calculate"):
-    try:
-        result = calculate_net_value(
-            invoice_value, brokerage, freight,
-            total_duty, mpf_percent, hmf_percent, total_tariff
-        )
-        
-        # Display breakdown in the requested format
-        st.subheader("📊 Calculation Breakdown")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.metric("Invoice Value", f"${invoice_value:,.2f}")
-            st.metric("Brokerage", f"${brokerage:,.2f}")
-            st.metric("Freight", f"${freight:,.2f}")
-            st.metric("MPF (HMF)", f"${result['mpf_amount'] + result['hmf_amount']:,.2f}")
-        
-        with col2:
-            st.metric(f"Duty **({total_duty}%)**", f"${result['duty_amount']:,.2f}", border=True)
-            st.metric(f"Tariff **({total_tariff}%)**", f"${result['tariff_amount']:,.2f}", border=True)
-            st.metric("**Net Value**", f"${result['net_value']:,.2f}", border=True)
-        
-        # Additional breakdown table
-        breakdown_data = {
-            'Component': ['Invoice Value', 'Brokerage', 'Freight', 'MPF', 'HMF', 'Duty', 'Tariff', 'Net Value'],
-            'Amount ($)': [
-                f"{invoice_value:,.2f}",
-                f"{brokerage:,.2f}",
-                f"{freight:,.2f}",
-                f"{result['mpf_amount']:,.2f}",
-                f"{result['hmf_amount']:,.2f}",
-                f"{result['duty_amount']:,.2f}",
-                f"{result['tariff_amount']:,.2f}",
-                f"{result['net_value']:,.2f}"
-            ]
-        }
-        
-        st.subheader("📋 Detailed Breakdown")
-        breakdown_df = pd.DataFrame(breakdown_data)
-        st.dataframe(breakdown_df, use_container_width=True)
-        
-    except ValueError as e:
-        st.error(str(e))
-    except NameError:
+    if not st.session_state.hs_code_list:
         st.error("Please add at least one HS code to calculate duties and tariffs.")
+    else:
+        try:
+            result = calculate_net_value(
+                invoice_value, brokerage, freight,
+                total_duty, mpf_percent, hmf_percent, total_tariff
+            )
+            
+            # Display breakdown with persistent user information
+            st.subheader("📊 Calculation Breakdown")
+            st.caption(f"**User:** {st.session_state.user_email} | **Order:** {st.session_state.order_number}")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric("Commercial Invoice Value", f"${invoice_value:,.2f}")
+                st.metric("Brokerage", f"${brokerage:,.2f}")
+                st.metric("Total Pre-paid Freight", f"${freight:,.2f}")
+                st.metric("MPF (HMF)", f"${result['mpf_amount'] + result['hmf_amount']:,.2f}")
+            
+            with col2:
+                st.metric(f"Duty **({total_duty}%)**", f"${result['duty_amount']:,.2f}", border=True)
+                st.metric(f"Tariff **({total_tariff}%)**", f"${result['tariff_amount']:,.2f}", border=True)
+                st.metric("**Net Value**", f"${result['net_value']:,.2f}", border=True)
+            
+            # Additional breakdown table
+            breakdown_data = {
+                'Component': ['Commercial Invoice Value', 'Brokerage', 'Total Pre-paid Freight', 'MPF', 'HMF', 'Duty', 'Tariff', 'Net Value'],
+                'Amount ($)': [
+                    f"{invoice_value:,.2f}",
+                    f"{brokerage:,.2f}",
+                    f"{freight:,.2f}",
+                    f"{result['mpf_amount']:,.2f}",
+                    f"{result['hmf_amount']:,.2f}",
+                    f"{result['duty_amount']:,.2f}",
+                    f"{result['tariff_amount']:,.2f}",
+                    f"{result['net_value']:,.2f}"
+                ]
+            }
+            
+            st.subheader("📋 Detailed Breakdown")
+            breakdown_df = pd.DataFrame(breakdown_data)
+            st.dataframe(breakdown_df, use_container_width=True)
+            
+        except ValueError as e:
+            st.error(str(e))
+        except NameError:
+            st.error("Please add at least one HS code to calculate duties and tariffs.")
