@@ -37,8 +37,8 @@ def calculate_net_value(
     tariff = tariff_percent / 100
 
     # Apply formula
-    numerator = round((invoice_value - brokerage - freight), 2)
-    denominator = round((1 + duty + mpf + hmf + tariff), 2)
+    numerator = (invoice_value - brokerage - freight)
+    denominator = (1 + duty + mpf + hmf + tariff)
 
     # Avoid division by zero
     if denominator == 0:
