@@ -5,6 +5,9 @@ import os
 import re
 import pandas as pd
 
+MAX_MPF = 634.62
+MIN_MPF = 32.71
+
 # Initialize session state for HS code list and form counter
 if 'hs_code_list' not in st.session_state:
     st.session_state.hs_code_list = []
@@ -15,6 +18,8 @@ if 'user_email' not in st.session_state:
     st.session_state.user_email = ""
 if 'order_number' not in st.session_state:
     st.session_state.order_number = ""
+if 'country_of_origin' not in st.session_state:
+    st.session_state.country_of_origin = ""
 
 def calculate_net_value(
     invoice_value,
@@ -32,19 +37,25 @@ def calculate_net_value(
     tariff = tariff_percent / 100
 
     # Apply formula
-    numerator = invoice_value - brokerage - freight
-    denominator = 1 + duty + mpf + hmf + tariff
+    numerator = round((invoice_value - brokerage - freight), 2)
+    denominator = round((1 + duty + mpf + hmf + tariff), 2)
 
     # Avoid division by zero
     if denominator == 0:
         raise ValueError("Denominator is zero, check the input percentages.")
 
-    net_value = numerator / denominator
+    net_value = round((numerator / denominator), 2)
     # Calculate individual fee amounts
     mpf_amount = net_value * mpf
     hmf_amount = net_value * hmf
     duty_amount = net_value * duty
     tariff_amount = net_value * tariff
+
+    # Check MPF against maximum and minimum values allowed by US Customs
+    if mpf_amount < MIN_MPF:
+        mpf_amount = MIN_MPF
+    elif mpf_amount > MAX_MPF:
+        mpf_amount = MAX_MPF
     
     return {
         'net_value': net_value,
@@ -90,6 +101,7 @@ elif user_email:
 if st.button("🔄 Start New Order", help="Clear user info and start fresh"):
     st.session_state.user_email = ""
     st.session_state.order_number = ""
+    st.session_state.country_of_origin = ""
     st.session_state.hs_code_list = []
     st.session_state.form_counter = 0
     st.rerun()
@@ -98,15 +110,18 @@ st.divider()  # Visual separator
 
 st.subheader("📦 Input Values")
 
-# Country of Origin and HS Code inputs - THESE reset with form_counter
+
 country_of_origin = st.selectbox(
     "Country of Origin",
     options=["", "Canada", "China", "US", "Italy", "France", "Germany"],
-    index=0,
+    index=["", "Canada", "China", "US", "Italy", "France", "Germany"].index(st.session_state.country_of_origin) if st.session_state.country_of_origin in ["", "Canada", "China", "US", "Italy", "France", "Germany"] else 0,
     help="Select the country where the goods were manufactured or produced",
-    key=f"country_of_origin_{st.session_state.form_counter}"  # This resets
+    key="persistent_country_of_origin"  # Fixed key, not tied to form_counter
 )
+# Update session state when input changes
+st.session_state.country_of_origin = country_of_origin
 
+# Only HS Code inputs reset with form_counter
 raw_hs_code = st.text_input(
     "HS Tariff Code", 
     max_chars=13, 
@@ -135,7 +150,6 @@ else:
     formatted_code = None
 
 # Attempt to autofill duty information based on HS code
-
 auto_duty = 0.00
 success = None
 
@@ -190,7 +204,7 @@ if formatted_code:
                     st.error("⚠️ Please enter order number before adding to list")
                 elif "@" not in st.session_state.user_email:  # Use session state
                     st.error("⚠️ Please enter a valid email address")
-                elif not country_of_origin:
+                elif not st.session_state.country_of_origin:  # Use session state
                     st.error("⚠️ Please select a country of origin")
                 else:
                     # Check if HS code already exists in list
@@ -204,11 +218,11 @@ if formatted_code:
                             'status': 'Auto-filled' if success == 0 else 'Manual',
                             'user_email': st.session_state.user_email,  # Use session state
                             'order_number': st.session_state.order_number,  # Use session state
-                            'country_of_origin': country_of_origin
+                            'country_of_origin': st.session_state.country_of_origin  # Use session state
                         })
-                        st.success(f"Added {formatted_code} from {country_of_origin} to list for order {st.session_state.order_number}")
+                        st.success(f"Added {formatted_code} from {st.session_state.country_of_origin} to list for order {st.session_state.order_number}")
                 
-                        # Reset only the HS code form fields, NOT user info
+                        # Reset only the HS code form fields, NOT user info or country
                         st.session_state.form_counter += 1
                         st.rerun()
                     else:
@@ -226,11 +240,14 @@ if formatted_code:
 if st.session_state.hs_code_list:
     st.subheader("HS Code List")
     
-    # Create DataFrame for display - exclude user info columns
+    # Show current order information
+    st.info(f"📧 **User:** {st.session_state.user_email} | 📋 **Order:** {st.session_state.order_number} | 🌍 **Country:** {st.session_state.country_of_origin}")
+    
+    # Create DataFrame for display - exclude user info columns but show country for reference
     df = pd.DataFrame(st.session_state.hs_code_list)
     
     # Select only the columns we want to display
-    display_columns = ['hs_code', 'duty_percent', 'tariff_percent', 'country_of_origin', 'status']
+    display_columns = ['hs_code', 'duty_percent', 'tariff_percent', 'status']
     df_display = df[display_columns]
     
     print(st.session_state.hs_code_list)
@@ -254,10 +271,6 @@ if st.session_state.hs_code_list:
                 step=0.01,
                 format="%.2f"
             ),
-            "country_of_origin": st.column_config.SelectboxColumn(
-                "Country of Origin",
-                options=["Canada", "China", "US", "Italy", "France", "Germany"]
-            ),
             "status": "Status"
         },
         num_rows="dynamic",
@@ -271,8 +284,9 @@ if st.session_state.hs_code_list:
             st.session_state.hs_code_list[i]['hs_code'] = edited_row['hs_code']
             st.session_state.hs_code_list[i]['duty_percent'] = edited_row['duty_percent']
             st.session_state.hs_code_list[i]['tariff_percent'] = edited_row['tariff_percent']
-            st.session_state.hs_code_list[i]['country_of_origin'] = edited_row['country_of_origin']
             st.session_state.hs_code_list[i]['status'] = edited_row['status']
+            # Country of origin is already consistent across all entries
+            st.session_state.hs_code_list[i]['country_of_origin'] = st.session_state.country_of_origin
     
     # Calculate and display total duty
     total_tariff = sum(float(row['tariff_percent']) for row in st.session_state.hs_code_list if isinstance(row['tariff_percent'], (int, float)))
@@ -288,7 +302,7 @@ invoice_value = st.number_input("Commercial Invoice Value (USD)")
 brokerage = st.number_input("Brokerage (USD)")
 freight = st.number_input("Total Pre-paid Freight (USD)")
 
-mpf_percent = st.number_input("Merchandise Processing Fee (%)", value=0.3464, format="%.4f")
+mpf_percent = st.number_input("Merchandise Processing Fee (%)", value=0.3464, format="%.4f", help="MPF is a fee charged by US Customs for processing imported goods. The current rate is 0.3464% of the value of the goods, with a minimum of \$31.67 and a maximum of \$614.35. (19 U.S.C. § 58c(a(a)(9)(B)(i);(b)(8)(A)(i))")
 
 # Show HMF only if mode is Ocean Freight
 if mode == "Ocean Freight":
@@ -309,7 +323,7 @@ if st.button("Calculate"):
             
             # Display breakdown with persistent user information
             st.subheader("📊 Calculation Breakdown")
-            st.caption(f"**User:** {st.session_state.user_email} | **Order:** {st.session_state.order_number}")
+            st.caption(f"**User:** {st.session_state.user_email} | **Order:** {st.session_state.order_number} | **Country:** {st.session_state.country_of_origin}")
             
             col1, col2 = st.columns(2)
             
@@ -317,7 +331,7 @@ if st.button("Calculate"):
                 st.metric("Commercial Invoice Value", f"${invoice_value:,.2f}")
                 st.metric("Brokerage", f"${brokerage:,.2f}")
                 st.metric("Total Pre-paid Freight", f"${freight:,.2f}")
-                st.metric("MPF (HMF)", f"${result['mpf_amount'] + result['hmf_amount']:,.2f}")
+                st.metric("MPF + HMF", f"${result['mpf_amount'] + result['hmf_amount']:,.2f}")
             
             with col2:
                 st.metric(f"Duty **({total_duty}%)**", f"${result['duty_amount']:,.2f}", border=True)
