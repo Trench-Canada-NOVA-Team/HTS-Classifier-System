@@ -381,7 +381,7 @@ def process_invoice_section_file(file_path: str) -> tuple[List[Dict], List[Dict]
         return [], []
 
 
-def scrape_invoice_sections_folder(folder_path: str = "invoice_sections") -> tuple[pd.DataFrame, pd.DataFrame]:
+def scrape_invoice_sections_folder(folder_path: str = "data_scraping\invoice_sections") -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Process all invoice section text files in the folder and return DataFrames for costs and HS codes
     Returns: (costs_df, hs_codes_df)
@@ -423,8 +423,8 @@ def scrape_invoice_sections_folder(folder_path: str = "invoice_sections") -> tup
     return costs_df, hs_codes_df
 
 def save_results(costs_df: pd.DataFrame, hs_codes_df: pd.DataFrame, 
-                costs_output: str = "Data scraping test\invoice_costs.csv", 
-                hs_output: str = "Data scraping test\hs_codes_duties.csv"):
+                costs_output: str = "data_scraping\invoice_costs.csv", 
+                hs_output: str = "data_scraping\hs_codes_duties.csv"):
     """Save both DataFrames to CSV files"""
     
     if not costs_df.empty:
@@ -480,7 +480,7 @@ if __name__ == "__main__":
     test_extraction()
     
     # Process the invoice sections folder
-    invoice_sections_folder = "invoice_sections"
+    invoice_sections_folder = "data_scraping\invoice_sections"
     
     try:
         # Scrape all invoice section files

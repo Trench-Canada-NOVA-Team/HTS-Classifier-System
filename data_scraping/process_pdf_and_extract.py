@@ -278,7 +278,7 @@ def extract_invoice_section(text: str) -> str:
     # Return all sections combined
     return '\n\n--- NEXT INVOICE SECTION ---\n\n'.join(invoice_sections)
 
-def write_invoice_section_to_file(pdf_path: str, invoice_section: str, output_folder: str = "invoice_sections"):
+def write_invoice_section_to_file(pdf_path: str, invoice_section: str, output_folder: str = "data_scraping\invoice_sections"):
     """Write only the invoice section to a plain text file"""
     
     # Create output folder if it doesn't exist
@@ -301,7 +301,7 @@ def write_invoice_section_to_file(pdf_path: str, invoice_section: str, output_fo
     except Exception as e:
         print(f"Error saving invoice section for {pdf_path}: {e}")
 
-def write_extracted_text_to_file(pdf_path: str, text: str, output_folder: str = "extracted_text"):
+def write_extracted_text_to_file(pdf_path: str, text: str, output_folder: str = "data_scraping\extracted_text"):
     """Write extracted text to a plain text file for verification"""
     
     # Create output folder if it doesn't exist
@@ -414,7 +414,7 @@ def scrape_entry_data_folder(folder_path: str) -> pd.DataFrame:
         print("No entry data found in any PDF files")
         return pd.DataFrame()
 
-def save_results(df: pd.DataFrame, output_path: str = "Data scraping test\extracted_entry_data.csv"):
+def save_results(df: pd.DataFrame, output_path: str = "data_scraping\extracted_entry_data.csv"):
     """Save results to CSV file"""
     if not df.empty:
         df.to_csv(output_path, index=False)
@@ -427,7 +427,7 @@ def save_results(df: pd.DataFrame, output_path: str = "Data scraping test\extrac
 if __name__ == "__main__":
     
     # Set the path to your entry data folder
-    entry_data_folder = r"Data scraping test\entry_data"
+    entry_data_folder = r"data_scraping\entry_data"
     
     try:
         # Scrape the PDFs

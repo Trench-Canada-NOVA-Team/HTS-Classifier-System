@@ -31,9 +31,9 @@ def clean_csv(file_path, output_file):
 
 if __name__ == "__main__":
     # Combining scraped data with HS codes and duties
-    file1 = 'Data scraping test\extracted_entry_data.csv'
-    file2 = 'Data scraping test\hs_codes_duties.csv'
+    file1 = 'data_scraping\extracted_entry_data.csv'
+    file2 = 'data_scraping\hs_codes_duties.csv'
     join_column = 'source_file'  # Change to your join column
-    output_file = 'Data scraping test\entry_data\combined.csv'
+    output_file = 'data_scraping\entry_data\combined.csv'
     combine_csv(file1, file2, join_column, output_file)
-    clean_csv(output_file, 'Data scraping test\entry_data\cleaned_combined.csv')
+    clean_csv(output_file, 'data_scraping\entry_data\cleaned_combined.csv')
