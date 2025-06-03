@@ -16,6 +16,10 @@ def initialize_session_state():
     
     if 'country_of_origin' not in st.session_state:
         st.session_state.country_of_origin = ""
+    
+    # ADD THIS 1 LINE
+    if 'mode_of_delivery' not in st.session_state:
+        st.session_state.mode_of_delivery = ""
 
 def reset_order():
     """Reset user info and start fresh"""

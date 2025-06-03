@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 Data/
 cache/
+entry_data/
