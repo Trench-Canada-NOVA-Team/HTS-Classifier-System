@@ -1,10 +1,21 @@
 import streamlit as st
 import sys
 from pathlib import Path
+import importlib
+
+# FIRST: Set page config before any other Streamlit commands
+st.set_page_config(
+    page_title="TariffPilot Calculator",
+    layout="wide"
+)
 
 # Add the current directory to path for importing components
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
+
+# Import and force reload to ensure we get the latest version
+import components.calculator
+importlib.reload(components.calculator)  # Force reload
 
 from components.session_manager import initialize_session_state
 from components.user_info import render_user_info_section, render_new_order_button
@@ -15,13 +26,7 @@ from components.results_display import render_calculation_results
 from components.tariff_engine import render_tariff_decision_flow, get_calculated_tariffs
 
 def main():
-    st.set_page_config(
-        page_title="TariffPilot Calculator",
-        page_icon="🚢",
-        layout="wide"
-    )
-    
-    st.title("🚢 Tariff & Net Value Calculator")
+    st.title("Tariff & Net Value Calculator")
     
     # Initialize session state
     initialize_session_state()
@@ -83,10 +88,16 @@ def main():
                 # Calculate total duty from HS codes list
                 total_duty = sum(item['duty_percent'] for item in st.session_state.hs_code_list) if st.session_state.hs_code_list else 0
                 
+                # Get the freight mode from session state
+                freight_mode = st.session_state.get('mode_of_delivery', 'Ocean')
+                
+                # Use the updated function with ISF support
                 result = calculate_net_value(
-                    invoice_value, brokerage, freight, 
-                    total_duty, mpf_percent, hmf_percent, total_tariff
+                    invoice_value, brokerage, freight,
+                    total_duty, mpf_percent, hmf_percent, total_tariff,
+                    freight_mode=freight_mode
                 )
+                
                 render_calculation_results(result, invoice_value, brokerage, freight, total_duty, total_tariff)
             except ValueError as e:
                 st.error(f"Calculation error: {str(e)}")
