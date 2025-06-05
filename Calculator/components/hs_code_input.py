@@ -53,6 +53,41 @@ def lookup_duty_info(formatted_code):
         st.error(f"Error looking up duty: {str(e)}")
         return 1, f"Error: {str(e)}"
 
+def render_goods_type_selector():
+    """Render goods type selector with custom option capability"""
+    
+    # Get current custom goods types
+    available_types = st.session_state.custom_goods_types.copy()
+    available_types.append("➕ Add Custom Type...")
+    
+    # Goods type selection
+    selected_type = st.selectbox(
+        "Goods Type",
+        options=available_types,
+        help="Select the type of goods or add a custom type",
+        key=f"goods_type_{st.session_state.form_counter}"
+    )
+    
+    # Handle custom type addition
+    if selected_type == "➕ Add Custom Type...":
+        custom_type = st.text_input(
+            "Enter custom goods type:",
+            placeholder="e.g., Industrial Machinery",
+            key=f"custom_goods_type_{st.session_state.form_counter}"
+        )
+        
+        if custom_type and st.button("Add Custom Type", key=f"add_custom_{st.session_state.form_counter}"):
+            if custom_type not in st.session_state.custom_goods_types:
+                st.session_state.custom_goods_types.append(custom_type)
+                st.success(f"Added '{custom_type}' to goods types!")
+                st.rerun()
+            else:
+                st.warning("This goods type already exists!")
+        
+        return custom_type if custom_type else ""
+    
+    return selected_type
+
 def render_hs_code_input():
     """Render HS code input section"""
     st.subheader("📦 Input Values")
@@ -96,4 +131,8 @@ def render_hs_code_input():
         key=f"tariff_percent_{st.session_state.form_counter}"
     )
     
-    return formatted_code, duty_percent, tariff_percent
+    # ADD GOODS TYPE SELECTION
+    goods_type = render_goods_type_selector()
+    
+    # RETURN GOODS TYPE AS WELL
+    return formatted_code, duty_percent, tariff_percent, goods_type

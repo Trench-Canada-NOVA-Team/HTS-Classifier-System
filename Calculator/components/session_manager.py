@@ -2,12 +2,6 @@ import streamlit as st
 
 def initialize_session_state():
     """Initialize all session state variables"""
-    if 'hs_code_list' not in st.session_state:
-        st.session_state.hs_code_list = []
-    
-    if 'form_counter' not in st.session_state:
-        st.session_state.form_counter = 0
-    
     if 'user_email' not in st.session_state:
         st.session_state.user_email = ""
     
@@ -17,9 +11,21 @@ def initialize_session_state():
     if 'country_of_origin' not in st.session_state:
         st.session_state.country_of_origin = ""
     
-    # ADD THIS 1 LINE
-    if 'mode_of_delivery' not in st.session_state:
-        st.session_state.mode_of_delivery = ""
+    if 'hs_code_list' not in st.session_state:
+        st.session_state.hs_code_list = []
+    
+    if 'form_counter' not in st.session_state:
+        st.session_state.form_counter = 0
+    
+    # ADD THIS - Goods types management
+    if 'custom_goods_types' not in st.session_state:
+        st.session_state.custom_goods_types = [
+            "Trench CA Finished Goods",
+            "Warranty Replacement",
+            "Warranty Repair",
+            "After Sales Parts",
+            "Resale"
+        ]
 
 def reset_order():
     """Reset user info and start fresh"""
