@@ -55,7 +55,7 @@ def lookup_duty_info(formatted_code):
 
 def render_hs_code_input():
     """Render HS code input section"""
-    st.subheader("📦 Input Values")
+    st.subheader("Input Values")
     
     # Country of origin
     country_of_origin = st.selectbox(

@@ -5,16 +5,16 @@ def add_hs_code_to_list(formatted_code, duty_percent, tariff_percent):
     """Add HS code to the session state list"""
     # Validation
     if not st.session_state.user_email:
-        st.error("⚠️ Please enter user email before adding to list")
+        st.error("Please enter user email before adding to list")
         return False
     elif not st.session_state.order_number:
-        st.error("⚠️ Please enter order number before adding to list")
+        st.error("Please enter order number before adding to list")
         return False
     elif "@" not in st.session_state.user_email:
-        st.error("⚠️ Please enter a valid email address")
+        st.error("Please enter a valid email address")
         return False
     elif not st.session_state.country_of_origin:
-        st.error("⚠️ Please select a country of origin")
+        st.error("Please select a country of origin")
         return False
     
     # Check if HS code already exists
@@ -42,7 +42,7 @@ def render_hs_code_list():
         return 0, 0
     
     st.subheader("HS Code List")
-    st.info(f"📧 **User:** {st.session_state.user_email} | 📋 **Order:** {st.session_state.order_number} | 🌍 **Country:** {st.session_state.country_of_origin}")
+    st.info(f"**User:** {st.session_state.user_email} |  **Order:** {st.session_state.order_number} |  **Country:** {st.session_state.country_of_origin}")
     
     # Create DataFrame for display
     df = pd.DataFrame(st.session_state.hs_code_list)

@@ -1,10 +1,21 @@
 import streamlit as st
 import sys
 from pathlib import Path
+import importlib
+
+# FIRST: Set page config before any other Streamlit commands
+st.set_page_config(
+    page_title="TariffPilot Calculator",
+    layout="wide"
+)
 
 # Add the current directory to path for importing components
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
+
+# Import and force reload to ensure we get the latest version
+import components.calculator
+importlib.reload(components.calculator)  # Force reload
 
 from components.session_manager import initialize_session_state
 from components.user_info import render_user_info_section, render_new_order_button
@@ -14,13 +25,7 @@ from components.calculator import render_calculation_inputs, calculate_net_value
 from components.results_display import render_calculation_results
 
 def main():
-    st.set_page_config(
-        page_title="TariffPilot Calculator",
-        page_icon="🚢",
-        layout="wide"
-    )
-    
-    st.title("🚢 Tariff & Net Value Calculator")
+    st.title("Tariff & Net Value Calculator")
     
     # Initialize session state
     initialize_session_state()
@@ -71,10 +76,16 @@ def main():
             st.error("Please add at least one HS code to calculate duties and tariffs.")
         else:
             try:
+                # Get the freight mode from session state
+                freight_mode = st.session_state.get('mode_of_delivery', 'Ocean')
+                
+                # Use the updated function with ISF support
                 result = calculate_net_value(
                     invoice_value, brokerage, freight,
-                    total_duty, mpf_percent, hmf_percent, total_tariff
+                    total_duty, mpf_percent, hmf_percent, total_tariff,
+                    freight_mode=freight_mode
                 )
+                
                 render_calculation_results(result, invoice_value, brokerage, freight, total_duty, total_tariff)
             except ValueError as e:
                 st.error(str(e))

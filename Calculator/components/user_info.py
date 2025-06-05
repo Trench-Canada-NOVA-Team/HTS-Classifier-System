@@ -25,7 +25,7 @@ def render_user_info_section():
     # ADD THIS 1 LINE at the beginning of function
     logger = SimpleLogger()
     
-    st.subheader("👤 User Information")
+    st.subheader("User Information")
     col1, col2 = st.columns(2)
 
     with col1:
@@ -62,10 +62,10 @@ def render_user_info_section():
     if user_email and "@" not in user_email:
         st.error("Please enter a valid email address")
     elif user_email:
-        st.success("✅ Valid email format")
+        st.success("Valid email format")
 
 def render_new_order_button():
     """Render the start new order button"""
-    if st.button("🔄 Start New Order", help="Clear user info and start fresh"):
+    if st.button("Start New Order", help="Clear user info and start fresh"):
         reset_order()
         st.rerun()
