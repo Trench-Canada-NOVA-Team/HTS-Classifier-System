@@ -2,9 +2,20 @@ import streamlit as st
 import logging
 from typing import Dict, Any, Tuple, Optional
 from components.tariff_rules import *
+import csv
+import os
 
-# Configure logger
-logging.basicConfig(level=logging.INFO)
+# Configure logger to write to file
+log_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'tariff_calc.log')
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    filename=log_file,
+    filemode='a'  # 'a' for append, 'w' for overwrite
+)
 logger = logging.getLogger(__name__)
 
 class TariffDecisionEngine:
@@ -12,6 +23,28 @@ class TariffDecisionEngine:
     
     def __init__(self):
         self.decision_results = {}
+        self.usmca_data = self.load_usmca_data()
+
+    def load_usmca_data(self) -> Dict[str, Any]:
+        """Load USMCA eligibility data from CSV"""
+        usmca_data = {}
+
+        # Loading by given HS code
+        try:
+            logger.info("Loading USMCA eligibility data from CSV")
+            with open("../Calculator/database/usmca_eligible_hs_codes.csv", mode="r") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    usmca_data[row["HS Tariff Code"]] = {
+                        "description": row["Description of Goods"]
+                    }
+        except Exception as e:
+            logger.error(f"Error loading USMCA data: {e}")
+
+        # Loading by TPN ***TO BE IMPLEMENTED***
+        
+        logger.info(f"Loaded {len(usmca_data)} USMCA entries")
+        return usmca_data
     
     def check_country_origin(self, country: str) -> bool:
         """Check if country of Origin is Canada or elsewhere"""
@@ -29,14 +62,24 @@ class TariffDecisionEngine:
     
     def check_usmca_eligibility(self, hs_code: str) -> Tuple[bool, str]:
         """Check USMCA eligibility - placeholder for actual logic"""
-        # This would connect to your HTS database/API
-        # For now, return a placeholder
-        return False, "USMCA check not implemented yet"
+        
+        # Use pre-loaded USMCA data defined during intialization, return eligibility status
+        # and description if eligible
+        for code in self.usmca_data:
+            if hs_code.startswith(code):
+                logger.info(f"USMCA eligibility found for HS Code: {hs_code}")
+                return True, self.usmca_data[code]["description"]
+        
+        logger.info(f"USMCA eligibility not confirmed for HS Code: {hs_code}")
+        return False, "USMCA not eligible"
     
     def check_steel_aluminum_content(self, hs_code: str) -> Tuple[bool, Dict]:
         """Check if product contains steel or aluminum derivatives"""
-        # Steel & Aluminum HTS codes (placeholder)
-        # Implement to check HTS code database
+        for cat, code_list in ALL_STEEL_ALUMINIUM_CODES.items():
+            for code in code_list:
+                if hs_code.startswith(code):
+                    logger.info(f"Steel/Aluminum content found for HS Code: {hs_code}")
+                    return True, {"type": cat}
         
         return False, {}
     
@@ -69,7 +112,7 @@ class TariffDecisionEngine:
             if is_usmca:
                 logger.info("USMCA eligibility confirmed")
                 result["decision_path"].append("USMCA Eligible")
-                result["final_tariff"] = 0
+                result["additional_tariff"] += 0
                 result["tariff_type"] = "USMCA Free"
                 result["notes"].append("Eligible for USMCA duty-free treatment")
 
@@ -77,12 +120,13 @@ class TariffDecisionEngine:
                 has_steel_aluminum, steel_aluminum_info = self.check_steel_aluminum_content(hs_code)
                 
                 if has_steel_aluminum:
-                    logger.info(f"Product contains steel/aluminum: {steel_aluminum_info}")
-                    result["decision_path"].append(f"Contains {steel_aluminum_info.get('type', 'steel/aluminum')}")
+                    logger.info(f"Product contains steel/aluminum: {steel_aluminum_info.get('type')}")
+                    result["decision_path"].append(f"Contains {steel_aluminum_info.get('type')}")
                     additional_tariff = TARIFF_RATES["steel_alum_232_tariff"]
+                    logger.debug(f"Applying additional tariff of {additional_tariff}% for {steel_aluminum_info.get('type')}")
                     result["additional_tariff"] += additional_tariff
-                    result["tariff_type"] = f"{steel_aluminum_info.get('type', 'Steel/Aluminum').title()} Tariff"
-                    result["notes"].append(f"Additional {additional_tariff}% tariff for {steel_aluminum_info.get('type', 'steel/aluminum')}")
+                    result["tariff_type"] = f"{steel_aluminum_info.get('type')} Tariff"
+                    result["notes"].append(f"Additional {additional_tariff}% tariff for {steel_aluminum_info.get('type')}")
                 
                 return result
             
