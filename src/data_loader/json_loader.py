@@ -205,7 +205,7 @@ class HTSDataLoader:
             Dict containing the HTS code information with cleaned values
         """
         info = self.hts_code_map.get(hts_code, {})
-        logger.debug(f"HTS code {hts_code} info: {info}")
+        # logger.debug(f"HTS Code: {hts_code}, Info: {info}")
         if info and not info.get('general'):
             info['general'] = 'N/A'
         return info

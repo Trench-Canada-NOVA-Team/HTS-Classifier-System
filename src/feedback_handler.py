@@ -1,5 +1,6 @@
 import json
-from datetime import datetime
+from typing import Dict 
+from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
 from loguru import logger
@@ -61,7 +62,6 @@ class FeedbackHandler:
     def _test_s3_connection(self):
         """Test S3 connection and permissions."""
         try:
-            # Try to list objects in the bucket (this tests basic access)
             self.s3_client.list_objects_v2(Bucket=self.bucket_name, MaxKeys=1)
             logger.info("S3 connection test successful")
         except Exception as e:
@@ -86,11 +86,9 @@ class FeedbackHandler:
                     self._save_to_s3(df)
                     logger.info(f"Created new feedback file in S3: {self.s3_key}")
                 else:
-                    # Some other error
                     raise
         except Exception as e:
             logger.error(f"Error initializing S3 feedback file: {str(e)}")
-            # Don't raise - fall back to local storage
             self.use_s3 = False
             self.s3_available = False
             self._initialize_feedback_file()
@@ -99,7 +97,6 @@ class FeedbackHandler:
         """Create feedback file if it doesn't exist (local storage only)."""
         if not self.feedback_file.exists():
             self.feedback_file.parent.mkdir(parents=True, exist_ok=True)
-            # Create CSV with headers
             df = pd.DataFrame(columns=['timestamp', 'description', 'predicted_code', 'correct_code'])
             df.to_csv(self.feedback_file, index=False)
             logger.info(f"Created new feedback file at {self.feedback_file}")
@@ -166,13 +163,7 @@ class FeedbackHandler:
             raise
     
     def add_feedback(self, description, predicted_code, correct_code):
-        """Add new feedback entry.
-        
-        Args:
-            description (str): Original product description
-            predicted_code (str): HTS code predicted by the classifier
-            correct_code (str): Correct HTS code provided by user
-        """
+        """Add new feedback entry."""
         try:
             logger.info("Adding feedback...")
             df = self._load_feedback_data()
@@ -184,7 +175,6 @@ class FeedbackHandler:
                 "correct_code": correct_code,
             }])
             
-            # Append new entry to existing data
             df = pd.concat([df, new_entry], ignore_index=True)
             self._save_feedback_data(df)
             
@@ -194,6 +184,129 @@ class FeedbackHandler:
         except Exception as e:
             logger.error(f"Error adding feedback: {str(e)}")
             raise
+
+    def get_feedback_data_for_training(self) -> pd.DataFrame:
+        """Get feedback data specifically for training purposes."""
+        try:
+            df = self._load_feedback_data()
+            logger.info(f"Retrieved {len(df)} feedback records for training")
+            return df
+        except Exception as e:
+            logger.error(f"Error getting feedback data for training: {str(e)}")
+            return pd.DataFrame()
+
+    def get_recent_feedback(self, days: int = 30) -> pd.DataFrame:
+        """Get recent feedback data as DataFrame."""
+        try:
+            # Load all feedback data directly
+            df = self._load_feedback_data()
+            
+            if df.empty:
+                logger.info("No feedback data available")
+                return pd.DataFrame()
+            
+            # Convert timestamp column
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
+            # Filter by days
+            cutoff_date = datetime.now() - timedelta(days=days)
+            recent_df = df[df['timestamp'] >= cutoff_date]
+            
+            logger.info(f"Retrieved {len(recent_df)} recent feedback records from last {days} days")
+            return recent_df
+            
+        except Exception as e:
+            logger.error(f"Error getting recent feedback: {str(e)}")
+            return pd.DataFrame()
+
+    def get_correction_patterns(self, days: int = 30) -> Dict:
+        """Get correction patterns from feedback data."""
+        try:
+            # Get recent feedback data
+            recent_data = self.get_recent_feedback(days=days)
+            
+            if recent_data.empty:
+                return {}
+            
+            # Get only corrections (where predicted != correct)
+            corrections = recent_data[recent_data['predicted_code'] != recent_data['correct_code']]
+            
+            if corrections.empty:
+                return {}
+            
+            patterns = {}
+            
+            # Group by chapter-level corrections
+            for _, row in corrections.iterrows():
+                pred_chapter = str(row['predicted_code'])[:2]
+                correct_chapter = str(row['correct_code'])[:2]
+                
+                if pred_chapter != correct_chapter:
+                    pattern_key = f"Chapter {pred_chapter} -> Chapter {correct_chapter}"
+                    
+                    if pattern_key not in patterns:
+                        patterns[pattern_key] = []
+                    
+                    patterns[pattern_key].append({
+                        'description': row['description'],
+                        'predicted_code': row['predicted_code'],
+                        'correct_code': row['correct_code'],
+                        'timestamp': row['timestamp']
+                    })
+            
+            logger.info(f"Found {len(patterns)} correction patterns")
+            return patterns
+            
+        except Exception as e:
+            logger.error(f"Error getting correction patterns: {str(e)}")
+            return {}
+
+    def get_feedback_quality_metrics(self, days: int = 30) -> Dict:
+        """Get quality metrics for feedback data."""
+        try:
+            recent_data = self.get_recent_feedback(days=days)
+            
+            if recent_data.empty:
+                return {
+                    'total_entries': 0,
+                    'total_corrections': 0,
+                    'correction_rate': 0,
+                    'data_freshness': 'No data'
+                }
+            
+            # Calculate corrections
+            corrections = recent_data[recent_data['predicted_code'] != recent_data['correct_code']]
+            total_corrections = len(corrections)
+            correction_rate = total_corrections / len(recent_data) if len(recent_data) > 0 else 0
+            
+            # Calculate data freshness
+            latest_timestamp = pd.to_datetime(recent_data['timestamp']).max()
+            data_age = (datetime.now() - latest_timestamp).days
+            
+            if data_age <= 1:
+                freshness = 'Fresh'
+            elif data_age <= 7:
+                freshness = 'Recent'
+            else:
+                freshness = 'Stale'
+            
+            return {
+                'total_entries': len(recent_data),
+                'total_corrections': total_corrections,
+                'correction_rate': correction_rate,
+                'data_freshness': freshness,
+                'latest_feedback': latest_timestamp.isoformat() if not pd.isna(latest_timestamp) else 'No data'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting quality metrics: {str(e)}")
+            return {
+                'total_entries': 0,
+                'total_corrections': 0,
+                'correction_rate': 0,
+                'data_freshness': 'Error',
+                'error': str(e)
+            }
     
     def get_feedback_stats(self):
         """Get statistics about collected feedback."""
@@ -212,7 +325,7 @@ class FeedbackHandler:
             
             # Convert recent entries to dict format
             recent_entries = []
-            for _, row in df.tail(5).iterrows():
+            for _, row in df.tail(10).iterrows():  # Get last 10 entries
                 recent_entries.append({
                     'timestamp': row['timestamp'],
                     'description': row['description'],
@@ -223,16 +336,17 @@ class FeedbackHandler:
             return {
                 "total_entries": total,
                 "accuracy": correct / total if total > 0 else 0,
-                "recent_entries": recent_entries
+                "recent_entries": recent_entries,
+                "storage_location": "S3" if (self.use_s3 and self.s3_available) else "local file"
             }
             
         except Exception as e:
             logger.error(f"Error getting feedback stats: {str(e)}")
             raise
-    
+        
     @staticmethod
     def format_hs_code(code):
         """Format HTS code with proper structure."""
-        digits = ''.join(filter(str.isdigit, code))[:12]  # remove non-digits, limit to 12 chars
+        digits = ''.join(filter(str.isdigit, code))[:12]
         sections = [digits[i:j] for i, j in [(0, 4), (4, 6), (6, 8), (8, 10)] if i < len(digits)]
         return '.'.join(sections)
