@@ -389,7 +389,7 @@ Example confidence scores:
                         {"role": "system", "content": "You are an expert US HTS classification system. Analyze product descriptions and HTS codes, then return only a confidence score between 0-100."},
                         {"role": "user", "content": prompt}
                     ],
-                    temperature=0.3,
+                    temperature=0.0,
                     max_tokens=10
                 )
                 
