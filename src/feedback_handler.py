@@ -204,6 +204,7 @@ class FeedbackHandler:
             if df.empty:
                 logger.info("No feedback data available")
                 return pd.DataFrame()
+        
             
             # Convert timestamp column
             df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -310,6 +311,7 @@ class FeedbackHandler:
     
     def get_feedback_stats(self):
         """Get statistics about collected feedback."""
+        logger.info("Getting feedback statistics...")
         try:
             df = self._load_feedback_data()
             
@@ -322,6 +324,7 @@ class FeedbackHandler:
             
             total = len(df)
             correct = sum(df['predicted_code'] == df['correct_code'])
+            logger.debug(f"Total entries: {total}, Correct predictions: {correct}")
             
             # Convert recent entries to dict format
             recent_entries = []
@@ -335,6 +338,7 @@ class FeedbackHandler:
             
             return {
                 "total_entries": total,
+                "correct_predictions": correct,
                 "accuracy": correct / total if total > 0 else 0,
                 "recent_entries": recent_entries,
                 "storage_location": "S3" if (self.use_s3 and self.s3_available) else "local file"

@@ -478,6 +478,9 @@ class FeedbackEnhancedClassifier(HTSClassifier):
                     feedback_df = feedback_df[feedback_df['timestamp'] >= cutoff_date]
             
             logger.info(f"📊 Loaded {len(feedback_df)} feedback entries")
+            ##############################
+            logger.debug(feedback_df.head())
+            ##############################
             
             # Cache the result
             self.feedback_cache[cache_key] = feedback_df

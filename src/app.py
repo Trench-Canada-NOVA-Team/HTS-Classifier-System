@@ -27,9 +27,11 @@ def initialize_feedback_handler():
 
 def calculate_detailed_stats(feedback_handler):
     """Calculate detailed statistics from feedback data using FeedbackHandler methods"""
+    logger.debug("Calculating detailed stats from feedback handler")
     try:
         # Use get_feedback_stats method from FeedbackHandler
         stats = feedback_handler.get_feedback_stats()
+        logger.debug(f"Feedback stats: {stats}")  # Log the stats for debugging
         
         if not stats:
             return {
@@ -82,7 +84,7 @@ def get_feedback_summary(feedback_handler):
         # Get recent feedback for analysis
         recent_feedback = feedback_handler.get_recent_feedback(days=30)
         
-        if not recent_feedback:
+        if recent_feedback.empty:
             return {
                 'recent_entries': 0,
                 'recent_corrections': 0,
@@ -93,11 +95,13 @@ def get_feedback_summary(feedback_handler):
         recent_entries = len(recent_feedback)
         recent_corrections = 0
         corrected_codes = {}
-        
-        for entry in recent_feedback:
-            predicted = entry.get('predicted_code', '')
-            correct = entry.get('correct_code', '')
-            
+
+        logger.debug(f"recent feedback:\n{recent_feedback.head()}")  # Log first few entries for debugging
+
+        for entry in recent_feedback.itertuples():
+            predicted = entry.predicted_code
+            correct = entry.correct_code
+
             if predicted != correct:
                 recent_corrections += 1
                 if correct in corrected_codes:
@@ -413,6 +417,14 @@ st.markdown("""
 
 # Sidebar Navigation
 with st.sidebar:
+    sidebar_image_path = Path(__file__).parent / "assets" / "trench-logo.png"
+    if sidebar_image_path.exists():
+        st.image(str(sidebar_image_path), use_container_width=True)
+
+    # vertical spacer
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Navigation options
     st.title("Navigation")
     
     page = st.radio(
