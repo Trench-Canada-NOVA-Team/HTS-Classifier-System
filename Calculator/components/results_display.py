@@ -54,7 +54,23 @@ def render_calculation_results(result, invoice_value, brokerage, freight, total_
             f"{result['net_value']:,.2f}"
         ]
     }
+
+    # Header with download option
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader("Detailed Breakdown")
+    with col2:
+        # Single download button
+        breakdown_df = pd.DataFrame(breakdown_data)
+        csv = breakdown_df.to_csv(index=False)
+        
+        st.download_button(
+            label="Download",
+            data=csv,
+            file_name=f"calculation_{st.session_state.order_number}.csv",
+            mime="text/csv"
+        )
     
-    st.subheader("Detailed Breakdown")
-    breakdown_df = pd.DataFrame(breakdown_data)
+    # Display the table
     st.dataframe(breakdown_df, use_container_width=True)
+

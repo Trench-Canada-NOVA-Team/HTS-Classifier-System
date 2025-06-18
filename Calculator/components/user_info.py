@@ -40,14 +40,14 @@ def render_user_info_section():
         # ADD THIS 1 LINE after setting user_email
         logger.start_user_session(user_email)
 
-        # ADD THIS - Country of Origin field (was missing)
-        country_origin = st.text_input(
-            "Country of Origin", 
-            value=st.session_state.country_of_origin,
-            placeholder="e.g., China, Mexico, Germany",
-            key="persistent_country_origin"
-        )
-        st.session_state.country_of_origin = country_origin
+        # # ADD THIS - Country of Origin field (was missing)
+        # country_origin = st.text_input(
+        #     "Country of Origin", 
+        #     value=st.session_state.country_of_origin,
+        #     placeholder="e.g., China, Mexico, Germany",
+        #     key="persistent_country_origin"
+        # )
+        # st.session_state.country_of_origin = country_origin
 
     with col2:
         order_number = st.text_input(

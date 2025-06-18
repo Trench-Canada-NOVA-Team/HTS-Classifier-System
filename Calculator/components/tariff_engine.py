@@ -155,7 +155,7 @@ class TariffDecisionEngine:
 
 def render_tariff_decision_flow():
     """Render the tariff decision flow interface"""
-    st.subheader("🎯 Tariff Decision Engine")
+    # st.subheader("Tariff Decision Engine")
     
     engine = TariffDecisionEngine()
     
