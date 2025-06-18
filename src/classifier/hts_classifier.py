@@ -156,46 +156,47 @@ class HTSClassifier:
         try:
             # First check explicit product mappings
             matching_codes = self.data_loader.find_matching_codes(product_description)
+            logger.debug(f"Matching codes found: {matching_codes}")
             results = []
             
-            if matching_codes:
-                for code in matching_codes:
-                    # Find the most specific matching code in our data
-                    specific_codes = [hts for hts in self.hts_codes if hts.startswith(code)]
-                    if specific_codes:
-                        # Sort by length to get most specific match
-                        specific_code = sorted(specific_codes, key=len, reverse=True)[0]
+            # if matching_codes:
+            #     for code in matching_codes:
+            #         # Find the most specific matching code in our data
+            #         specific_codes = [hts for hts in self.hts_codes if hts.startswith(code)]
+            #         if specific_codes:
+            #             # Sort by length to get most specific match
+            #             specific_code = sorted(specific_codes, key=len, reverse=True)[0]
                         
-                        hts_info = self.data_loader.get_hts_code_info(specific_code)
-                        hts_info['hts_code'] = specific_code
+            #             hts_info = self.data_loader.get_hts_code_info(specific_code)
+            #             hts_info['hts_code'] = specific_code
+
+            #             # Get country-specific rate information
+            #             rate_info = {}
+            #             if country_code:
+            #                 rate_info = self.data_loader.get_country_specific_rate(specific_code, country_code)
                         
-                        # Get country-specific rate information
-                        rate_info = {}
-                        if country_code:
-                            rate_info = self.data_loader.get_country_specific_rate(specific_code, country_code)
+            #             # Validate with GPT for confidence score
+            #             confidence = self.validate_with_gpt(product_description, hts_info)
                         
-                        # Validate with GPT for confidence score
-                        confidence = self.validate_with_gpt(product_description, hts_info)
-                        
-                        if confidence > 80:  # Higher threshold for mapped codes
-                            result = {
-                                'hts_code': specific_code,
-                                'description': hts_info.get('description', ''),
-                                'confidence': round(confidence, 2),
-                                'general_rate': hts_info.get('general', 'N/A'),
-                                'units': hts_info.get('units', []),
-                                'chapter_context': self.get_chapter_context(specific_code)
-                            }
+            #             if confidence > 80:  # Higher threshold for mapped codes
+            #                 result = {
+            #                     'hts_code': specific_code,
+            #                     'description': hts_info.get('description', ''),
+            #                     'confidence': round(confidence, 2),
+            #                     'general_rate': hts_info.get('general', 'N/A'),
+            #                     'units': hts_info.get('units', []),
+            #                     'chapter_context': self.get_chapter_context(specific_code)
+            #                 }
                             
-                            # Add country-specific rate information if available
-                            if rate_info:
-                                result.update({
-                                    'country_specific_rate': rate_info.get('rate'),
-                                    'trade_agreement': rate_info.get('trade_agreement'),
-                                    'country_name': rate_info.get('country_name')
-                                })
+            #                 # Add country-specific rate information if available
+            #                 if rate_info:
+            #                     result.update({
+            #                         'country_specific_rate': rate_info.get('rate'),
+            #                         'trade_agreement': rate_info.get('trade_agreement'),
+            #                         'country_name': rate_info.get('country_name')
+            #                     })
                             
-                            results.append(result)
+            #                 results.append(result)
             
             if results:
                 # Sort by confidence and return top matches
@@ -230,7 +231,9 @@ class HTSClassifier:
             for match in search_results.matches:
                 hts_code = match.metadata['hts_code']
                 chapter = hts_code[:2] if len(hts_code) >= 2 else ""
-                
+
+                full_description = self.data_loader.hts_code_backwalk(hts_code)
+
                 if chapter in seen_chapters and len(results) >= top_k:
                     continue
                 
@@ -251,12 +254,12 @@ class HTSClassifier:
                 if country_code:
                     rate_info = self.data_loader.get_country_specific_rate(hts_code, country_code)
                 
-                confidence = self.validate_with_gpt(product_description, hts_info)
+                confidence = self.validate_with_gpt(full_description, hts_info)
                 
                 if confidence > threshold:
                     result = {
                         'hts_code': hts_code,
-                        'description': match.metadata['description'],
+                        'description': full_description if full_description else hts_info.get('description', ''),
                         'confidence': round(confidence, 2),
                         'general_rate': hts_info.get('general', 'N/A'),
                         'units': hts_info.get('units', []),
@@ -340,7 +343,7 @@ class HTSClassifier:
         """Use GPT to validate the match and calculate confidence score with retry logic."""
         retry_count = 0
         base_delay = 1  # Base delay in seconds
-        
+
         while retry_count < max_retries:
             try:
                 # Prepare the rate information
@@ -355,33 +358,34 @@ class HTSClassifier:
                 # Enhanced prompt with specific category guidance
                 prompt = f"""As an expert in US Harmonized Tariff Schedule (HTS) classification, analyze the following product-code match.
 
-Product Description: {product_description}{context_info}
+                            Product Description: {product_description}{context_info}
 
-Candidate HTS Classification:
-- Code: {hts_info['hts_code']}
-- Official Description: {hts_info['description']}
-- Duty Rate: {general_rate}
-- Units of Measurement: {', '.join(hts_info.get('units', [])) if hts_info.get('units') else 'N/A'}
+                            Candidate HTS Classification:
+                            - Code: {hts_info['hts_code']}
+                            - Official Description: {hts_info['description']}
+                            - Duty Rate: {general_rate}
+                            - Units of Measurement: {', '.join(hts_info.get('units', [])) if hts_info.get('units') else 'N/A'}
 
-Important Category Guidelines:
-1. Leather wallets, handbags, and similar containers belong in Chapter 42 (4202)
-2. Aluminum doors, windows, and frames belong in heading 7610
-3. T-shirts and similar garments belong in heading 6109
-4. Industrial robots belong in heading 8428 or 8479
+                            Important Category Guidelines:
+                            1. Leather wallets, handbags, and similar containers belong in Chapter 42 (4202)
+                            2. Aluminum doors, windows, and frames belong in heading 7610
+                            3. T-shirts and similar garments belong in heading 6109
+                            4. Industrial robots belong in heading 8428 or 8479
 
-Evaluate the match considering:
-1. Product Specificity: How precisely does the HTS description match the product details?
-2. Category Alignment: Is this the correct category chapter/heading for this type of product?
-3. Material & Characteristics: Do any specified materials or characteristics align?
-4. Usage/Purpose: Does the intended use match the HTS category purpose?
+                            Evaluate the match considering:
+                            1. Product Specificity: How precisely does the HTS description match the product details?
+                            2. Category Alignment: Is this the correct category chapter/heading for this type of product?
+                            3. Material & Characteristics: Do any specified materials or characteristics align?
+                            4. Usage/Purpose: Does the intended use match the HTS category purpose?
 
-Return only a number between 0 and 100 representing your confidence in this classification match.
-Example confidence scores:
-- 95-100: Perfect match with exact terminology
-- 80-94: Very good match with minor variations
-- 60-79: Good match but some details differ
-- 40-59: Partial match with significant differences
-- 0-39: Poor match or wrong category"""
+                            Return only a number between 0 and 100 representing your confidence in this classification match.
+                            Example confidence scores:
+                            - 95-100: Perfect match with exact terminology
+                            - 80-94: Very good match with minor variations
+                            - 60-79: Good match but some details differ
+                            - 40-59: Partial match with significant differences
+                            - 0-39: Poor match or wrong category
+                            """
 
                 response = self.client.chat.completions.create(
                     model="gpt-4",

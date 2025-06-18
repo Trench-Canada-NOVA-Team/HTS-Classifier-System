@@ -108,6 +108,65 @@ class HTSDataLoader:
         except Exception as e:
             logger.error(f"Error loading HTS data: {str(e)}")
             raise
+
+    def hts_code_backwalk(self, hts_code: str) -> Optional[str]:
+        """Backwalk an HTS code to return a list of parent codes."""
+        data_path = self.data_dir / "combined_data.json"
+        
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                combined_data = json.load(f)
+            
+            # Find the item with the given HTS code
+            target_item = None
+            target_index = -1
+            for i, item in enumerate(combined_data):
+                if item.get('htsno') == hts_code:
+                    target_item = item
+                    target_index = i
+                    break
+            
+            if not target_item:
+                logger.warning(f"HTS code {hts_code} not found in combined data")
+                return None
+            
+            # Get the indent level of the target HTS code
+            target_indent = int(target_item.get('indent', 0))
+            
+            # Find hierarchical parents by walking backwards through the data
+            parent_items = []
+            current_indent = target_indent
+            
+            # Walk backwards from the target item to find parents
+            for i in range(target_index - 1, -1, -1):
+                item = combined_data[i]
+                item_indent = int(item.get('indent', 0))
+                
+                # If we find an item with lower indent, it's a parent
+                if item_indent < current_indent and item.get('htsno') and hts_code.startswith(item.get('htsno')):
+                    parent_items.append(item)
+                    current_indent = item_indent
+                    
+                    # Stop when we reach the top level (indent 0)
+                    if item_indent < 0:
+                        break
+            
+            # Reverse to get correct hierarchical order (highest level first)
+            parent_items.reverse()
+            
+            # Build the result string with parent descriptions
+            result = []
+            for parent in parent_items:
+                result.append(f"{parent.get('description', 'No description')}")
+                
+            result.append(f"{target_item.get('description', 'No description')}")  # Include the target item
+
+            return " >> ".join(result) if result else None
+        
+        except Exception as e:
+            logger.error(f"Error in hts_code_backwalk: {str(e)}")
+            return None
+    
             
     def process_chapter_data(self, chapter_data: List[Dict]):
         """Process and store HTS data from a chapter."""
@@ -120,7 +179,7 @@ class HTSDataLoader:
             hts_code = item['htsno'].strip()
             if not hts_code:
                 continue
-                
+
             # Store complete item in hts_data
             self.hts_data.append(item)
             
@@ -135,6 +194,7 @@ class HTSDataLoader:
                 'footnotes': item.get('footnotes', [])
             }
     
+
     def get_hts_code_info(self, hts_code: str) -> Dict:
         """Get detailed information for a specific HTS code.
         
@@ -145,6 +205,7 @@ class HTSDataLoader:
             Dict containing the HTS code information with cleaned values
         """
         info = self.hts_code_map.get(hts_code, {})
+        logger.debug(f"HTS code {hts_code} info: {info}")
         if info and not info.get('general'):
             info['general'] = 'N/A'
         return info

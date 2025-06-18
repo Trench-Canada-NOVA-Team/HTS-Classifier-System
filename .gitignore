@@ -175,3 +175,4 @@ cython_debug/
 Data/
 cache/
 entry_data/
+Calculator/database/usmca_eligible_hs_codes.csv
