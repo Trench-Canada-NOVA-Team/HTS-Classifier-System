@@ -2,15 +2,17 @@ import re
 from typing import List
 import numpy as np
 from loguru import logger
-from openai import OpenAI
-import os
-from dotenv import load_dotenv
+
+from config.settings import Config, HTSMappings
+from services.embedding_service import EmbeddingService
 
 class TextPreprocessor:
     def __init__(self):
-        """Initialize the text preprocessor with OpenAI."""
-        load_dotenv()
-        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        """Initialize the text preprocessor."""
+        self.embedding_service = EmbeddingService()
+        
+        # Load mappings from configuration
+        self.material_replacements = HTSMappings.MATERIAL_REPLACEMENTS
         
         # Common HTS-specific replacements
         self.material_replacements = {
@@ -68,13 +70,8 @@ class TextPreprocessor:
             r'remanufactured\b': 'reman'
         }
         
-    def clean_text(self, text: str) -> str:
-        """Clean and normalize product description text."""
-        # Convert to lowercase
-        text = text.lower()
-        
-        # Product category mappings for better matching
-        category_keywords = {
+        # Enhanced category keywords using HTSMappings
+        self.category_keywords = {
             # Leather goods (Chapter 42)
             'wallet': 'leather articles wallet billfold purse small leather goods 4202',
             'handbag': 'leather articles handbag purse shoulder bag tote 4202',
@@ -98,31 +95,24 @@ class TextPreprocessor:
             'coffee maker': 'electric coffee maker appliance heating 8516',
             'appliance': 'electric appliance household 85'
         }
+    
+    def clean_text(self, text: str) -> str:
+        """Clean and normalize product description text."""
+        # Convert to lowercase
+        text = text.lower()
         
         # Expand product category keywords
-        for key, expanded in category_keywords.items():
+        for key, expanded in self.category_keywords.items():
             if key in text:
                 text = f"{text} {expanded}"
         
-        # Expand accessory keywords
-        for key, expanded in self.accessory_keywords.items():
-            if key in text:
-                text = f"{text} {expanded}"
-                
-        # Expand material keywords
-        for key, expanded in self.material_keywords.items():
-            if key in text:
-                text = f"{text} {expanded}"
-        
-        # Replace material terms
+        # Apply replacements using configuration
         for pattern, replacement in self.material_replacements.items():
             text = re.sub(pattern, replacement, text)
             
-        # Replace measurement terms
         for pattern, replacement in self.measurement_replacements.items():
             text = re.sub(pattern, replacement, text)
             
-        # Replace state/condition terms
         for pattern, replacement in self.state_replacements.items():
             text = re.sub(pattern, replacement, text)
         
@@ -141,32 +131,13 @@ class TextPreprocessor:
         
         # Remove special characters but keep hyphens, numbers, %, and basic units
         text = re.sub(r'[^a-z0-9\s\-%\/]', ' ', text)
-        
-        # Replace multiple spaces with single space
         text = re.sub(r'\s+', ' ', text)
         
         return text.strip()
     
     def encode_text(self, texts: List[str]) -> np.ndarray:
-        """Encode text descriptions using OpenAI embeddings."""
-        try:
-            embeddings = []
-            batch_size = 100  # Process in batches to avoid rate limits
-            
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i + batch_size]
-                response = self.client.embeddings.create(
-                    model="text-embedding-3-small",
-                    input=batch,
-                    encoding_format="float"
-                )
-                batch_embeddings = [item.embedding for item in response.data]
-                embeddings.extend(batch_embeddings)
-                
-            return np.array(embeddings)
-        except Exception as e:
-            logger.error(f"Error encoding text with OpenAI: {str(e)}")
-            raise
+        """Encode text descriptions using the embedding service."""
+        return self.embedding_service.encode_texts(texts)
             
     def preprocess_descriptions(self, descriptions: List[str]) -> List[str]:
         """Preprocess a list of product descriptions."""

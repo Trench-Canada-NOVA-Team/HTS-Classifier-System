@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .hts_classifier import HTSClassifier
-from src.feedback_handler import FeedbackHandler  # Fixed import
-from src.utils.s3_feedback_trainer import S3FeedbackTrainer  # Fixed import
+from feedback_handler import FeedbackHandler  # Fixed import
+from utils.s3_feedback_trainer import S3FeedbackTrainer  # Fixed import
 
 
 class FeedbackEnhancedClassifier(HTSClassifier):

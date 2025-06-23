@@ -3,7 +3,65 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 from loguru import logger
-from utils.s3_helper import S3Helper
+import boto3
+from io import StringIO
+from typing import Dict, Optional
+from config.settings import Config
+
+class S3Helper:
+    """Helper class for S3 operations."""
+    
+    def __init__(self):
+        """Initialize S3 helper with configuration."""
+        self.bucket_name = Config.AWS_BUCKET_NAME
+        self.s3_key = Config.S3_FEEDBACK_KEY
+        
+        self.s3_client = boto3.client(
+            's3',
+            aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY,
+            region_name=Config.AWS_REGION
+        )
+    
+    def initialize_bucket(self) -> bool:
+        """Initialize S3 bucket and test connection."""
+        try:
+            self.s3_client.list_objects_v2(Bucket=self.bucket_name, MaxKeys=1)
+            logger.info("S3 connection test successful")
+            return True
+        except Exception as e:
+            logger.error(f"S3 connection test failed: {str(e)}")
+            return False
+    
+    def read_feedback(self) -> pd.DataFrame:
+        """Read feedback data from S3."""
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=self.s3_key)
+            content = response['Body'].read().decode('utf-8')
+            return pd.read_csv(StringIO(content))
+        except Exception as e:
+            if 'NoSuchKey' in str(e) or '404' in str(e):
+                logger.info("Feedback file not found in S3, creating empty DataFrame")
+                return pd.DataFrame(columns=['timestamp', 'description', 'predicted_code', 'correct_code'])
+            else:
+                logger.error(f"Error reading from S3: {str(e)}")
+                raise
+    
+    def upload_feedback(self, df: pd.DataFrame) -> None:
+        """Upload feedback DataFrame to S3."""
+        try:
+            csv_buffer = StringIO()
+            df.to_csv(csv_buffer, index=False)
+            
+            self.s3_client.put_object(
+                Bucket=self.bucket_name,
+                Key=self.s3_key,
+                Body=csv_buffer.getvalue()
+            )
+            logger.info("Successfully saved feedback data to S3")
+        except Exception as e:
+            logger.error(f"Error saving to S3: {str(e)}")
+            raise
 
 class FeedbackHandler:
     def __init__(self, use_s3=True):
@@ -15,11 +73,15 @@ class FeedbackHandler:
         self.use_s3 = use_s3
         
         if self.use_s3:
-            self.s3_helper = S3Helper()
-            self.s3_helper.initialize_bucket()
-        else:
-            # Fallback to local file storage
-            self.feedback_file = Path(__file__).parent.parent / "Data" / "feedback_data.csv"
+            try:
+                self.s3_helper = S3Helper()
+                self.s3_helper.initialize_bucket()
+            except Exception as e:
+                logger.error(f"Failed to initialize S3: {str(e)}")
+                self.use_s3 = False
+        
+        if not self.use_s3:
+            self.feedback_file = Config.DATA_DIR / "feedback_data.csv"
             self._initialize_feedback_file()
     
     def _initialize_feedback_file(self):
