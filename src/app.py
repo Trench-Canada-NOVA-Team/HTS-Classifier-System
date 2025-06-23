@@ -5,6 +5,7 @@ from data_loader.json_loader import HTSDataLoader
 from preprocessor.text_processor import TextPreprocessor
 from classifier.feedback_enhanced_classifier import FeedbackEnhancedClassifier
 from feedback_handler import FeedbackHandler
+from services.proof_service import ProofService
 import time
 from loguru import logger
 import pandas as pd
@@ -578,6 +579,48 @@ try:
                                         <strong>Units:</strong> {', '.join(result['units'])}
                                     </div>
                                     """, unsafe_allow_html=True)
+
+                                # Display Proof
+                                logger.info(f"Displaying proof for HTS code: {result['hts_code']}")
+                                logger.debug(f"Proof service initialized with HTS code: {result['hts_code']}")
+                                proof_handler = ProofService(result['hts_code'])
+
+                                page_num = proof_handler.find_hts_code_page(result['hts_code'])
+                                if page_num is None:
+                                    st.markdown("""
+                                    <div class="alert-warning">
+                                        <strong>Proof Not Found:</strong> The HTS code was not found in the PDF document.
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    continue
+                                else:
+                                    chapter_num = proof_handler.code_parts[0][:2]
+                                    logger.info(f"HTS code found on schedule chapter {chapter_num} page: {page_num}")
+
+                                logger.debug(f"Converting PDF page {page_num} to image")
+                                images = proof_handler.convert_pdf_to_images(page_num)
+                                
+                                
+                                with st.expander(f"📄 View HTS Code Proof (Chapter {chapter_num}, Page {page_num})", expanded=False):
+                                    st.image(images[0], use_container_width=True)
+                                    st.caption(f"Source: https://hts.usitc.gov/, Chapter {chapter_num}, Page {page_num}")
+                                    
+                                    # Optional: Add a download button for the image
+                                    from io import BytesIO
+                                    import PIL.Image
+                                    
+                                    # Convert PIL image to bytes
+                                    buf = BytesIO()
+                                    images[0].save(buf, format="PNG")
+                                    byte_im = buf.getvalue()
+                                    
+                                    st.download_button(
+                                        label="Download Proof Image",
+                                        data=byte_im,
+                                        file_name=f"hts_code_{result['hts_code']}_proof.png",
+                                        mime="image/png",
+                                        use_container_width=True
+                                    )
                                 
                                 st.markdown('</div>', unsafe_allow_html=True)
                             
