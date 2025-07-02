@@ -614,12 +614,21 @@ try:
                                     images[0].save(buf, format="PNG")
                                     byte_im = buf.getvalue()
                                     
+                                    # st.download_button(
+                                    #     label="Download Proof Image",
+                                    #     key =f"download_proof_{result['hts_code']}",
+                                    #     data=byte_im,
+                                    #     file_name=f"hts_code_{result['hts_code']}_proof.png",
+                                    #     mime="image/png",
+                                    #     use_container_width=True,
+                                    # )
                                     st.download_button(
                                         label="Download Proof Image",
                                         data=byte_im,
                                         file_name=f"hts_code_{result['hts_code']}_proof.png",
                                         mime="image/png",
-                                        use_container_width=True
+                                        use_container_width=True,
+                                        key=f"download_proof_{result['hts_code']}_{i}"
                                     )
                                 
                                 st.markdown('</div>', unsafe_allow_html=True)
