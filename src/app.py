@@ -458,7 +458,7 @@ try:
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
+            # st.markdown('<div class="card">', unsafe_allow_html=True)
             st.markdown('<div class="card-header">Product Classification</div>', unsafe_allow_html=True)
             
             description = st.text_area(
@@ -661,7 +661,7 @@ try:
         with col2:
             # Feedback Section
             if 'classification_results' in st.session_state and st.session_state.classification_results:
-                st.markdown('<div class="feedback-section">', unsafe_allow_html=True)
+                # st.markdown('<div class="feedback-section">', unsafe_allow_html=True)
                 st.markdown('<div class="card-header">Feedback & Learning</div>', unsafe_allow_html=True)
                 
                 with st.form(key="feedback_form"):
@@ -734,7 +734,7 @@ try:
                 
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
+                # st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.markdown('<div class="card-header">Quick Start</div>', unsafe_allow_html=True)
                 st.markdown("""
                 <div style="padding: 1rem 0;">
