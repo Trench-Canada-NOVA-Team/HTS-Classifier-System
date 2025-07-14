@@ -172,6 +172,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Others
 Data/
 cache/
 entry_data/
@@ -179,3 +181,6 @@ Calculator/database/usage_history.db
 Calculator/database/usmca_eligible_hs_codes 1.csv
 Research/
 Calculator/database/usmca_eligible_hs_codes.csv
+data_scraping/extracted_text/
+data_scraping/invoice_sections/
+accuracy_eval/
