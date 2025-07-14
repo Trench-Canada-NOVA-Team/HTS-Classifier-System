@@ -1,29 +1,32 @@
-# Web interface
+# Web Interface
 streamlit>=1.24.0
 pandas>=1.5.0
 Pillow>=9.0.0
 
-# API and environment
+# API and Environment
 python-dotenv>=0.19.0
 openai>=1.0.0
 
-# Vector Database
+# Vector Databases
 pinecone-client[grpc]>=2.2.4
 langchain-pinecone>=0.1.0
 langchain-community>=0.0.10
+langchain-openai>=0.1.0
+numpy>=1.21.0,<2.0.0
+faiss-cpu>=1.7.0,<1.8.0
 
-# AWS S3
+# AWS Services
 boto3>=1.28.0
 s3fs>=2024.6.1
 
-# Remaining dependencies
-numpy>=1.21.0
+# Core Dependencies
 loguru>=0.6.0
 typing-extensions>=4.0.0
 json5>=0.9.0
 
-# Data processing
+# Document Processing
 PyMuPDF>=1.26.0
 pdf2image>=1.17.0
-Pillow>=11.2.1
+
+# Install local package
 -e .

@@ -48,11 +48,22 @@ class Config:
     FEEDBACK_CACHE_DURATION = 5  # minutes
     DEFAULT_FEEDBACK_DAYS = 30
     
+    # FAISS Configuration
+    FAISS_INDEX_NAME = "feedback_faiss_langchain"
+    FAISS_METADATA_NAME = "feedback_metadata_langchain.pkl"
+    FAISS_SIMILARITY_THRESHOLD = 0.5
+    FAISS_TOP_K_DEFAULT = 5
+    
     # System Settings
     BATCH_SIZE = 100
     MAX_RETRIES = 3
     BASE_DELAY = 1  # seconds
     LOG_ROTATION = "500 MB"
+    
+    # Dashboard Settings
+    DASHBOARD_RECENT_ENTRIES_COUNT = 10
+    DASHBOARD_TOP_CORRECTIONS_COUNT = 5
+    PERFORMANCE_CACHE_DURATION = 300  # 5 minutes in seconds
 
 class HTSMappings:
     """HTS-specific mappings and constants."""

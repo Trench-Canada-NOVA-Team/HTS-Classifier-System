@@ -179,3 +179,5 @@ Calculator/database/usage_history.db
 Calculator/database/usmca_eligible_hs_codes 1.csv
 Research/
 Calculator/database/usmca_eligible_hs_codes.csv
+SYSTEM_DOCUMENTATION.md
+USER_GUIDE.md

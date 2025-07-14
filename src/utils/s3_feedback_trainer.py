@@ -10,14 +10,16 @@ class S3FeedbackTrainer:
     Utility class for training and analytics using S3-stored feedback data.
     """
     
-    def __init__(self, feedback_handler):
+    def __init__(self, feedback_handler, faiss_service=None):
         """
         Initialize the S3 feedback trainer.
         
         Args:
             feedback_handler: FeedbackHandler instance with S3 capabilities
+            faiss_service: Optional FaissFeedbackService instance
         """
         self.feedback_handler = feedback_handler
+        self.faiss_service = faiss_service
         
     def prepare_training_data(self, days: int = 30) -> Dict:
         """
@@ -317,3 +319,24 @@ class S3FeedbackTrainer:
         except Exception as e:
             logger.error(f"Error getting training recommendations: {str(e)}")
             return []
+    
+    def get_langchain_faiss_performance_metrics(self) -> Dict:
+        """Get performance metrics for Langchain FAISS feedback service."""
+        try:
+            if not hasattr(self, 'faiss_service') or not self.faiss_service:
+                return {'langchain_faiss_available': False}
+            
+            faiss_stats = self.faiss_service.get_feedback_stats()
+            
+            return {
+                'langchain_faiss_available': True,
+                'faiss_total_vectors': faiss_stats.get('total_vectors', 0),
+                'faiss_corrections': faiss_stats.get('total_corrections', 0),
+                'faiss_index_type': faiss_stats.get('index_type', 'Unknown'),
+                'faiss_embedding_model': faiss_stats.get('embedding_model', 'Unknown'),
+                'faiss_initialized': faiss_stats.get('is_initialized', False)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting Langchain FAISS performance metrics: {str(e)}")
+            return {'langchain_faiss_available': False, 'error': str(e)}
