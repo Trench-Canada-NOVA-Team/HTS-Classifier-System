@@ -4,9 +4,10 @@ from pathlib import Path
 from data_loader.json_loader import HTSDataLoader
 from preprocessor.text_processor import TextPreprocessor
 from classifier.feedback_enhanced_classifier import FeedbackEnhancedClassifier
-from feedback_handler import FeedbackHandler
+from utils.s3_helper import FeedbackHandler
 from services.proof_service import ProofService
 import time
+from config.settings import Config
 from loguru import logger
 import pandas as pd
 
@@ -15,16 +16,34 @@ def initialize_classifier():
     data_dir = Path(__file__).parent.parent / "Data"
     data_loader = HTSDataLoader(str(data_dir))
     preprocessor = TextPreprocessor()
-    feedback_handler = FeedbackHandler(use_s3=True)
     
-    classifier = FeedbackEnhancedClassifier(data_loader, preprocessor, feedback_handler)
+    # Initialize Langchain FAISS service for feedback
+    from services.faiss_feedback_service import FaissFeedbackService
+    faiss_service = FaissFeedbackService()
+    
+    # Initialize feedback handler with Langchain FAISS (no preprocessor parameter)
+    feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
+    
+    # Initialize enhanced classifier with Langchain FAISS
+    classifier = FeedbackEnhancedClassifier(data_loader, preprocessor, feedback_handler, faiss_service)
     classifier.build_index()
+    
+    # Rebuild Langchain FAISS from existing feedback data if needed
+    if faiss_service.get_feedback_stats()['total_vectors'] == 0:
+        logger.info("Langchain FAISS index is empty, rebuilding from existing feedback data...")
+        feedback_handler.rebuild_faiss_from_existing_data()
+    
     return classifier, data_loader
 
 @st.cache_resource
 def initialize_feedback_handler():
-    """Initialize the feedback handler with S3 support"""
-    return FeedbackHandler(use_s3=True)
+    """Initialize the feedback handler with S3 and Langchain FAISS support"""
+    from services.faiss_feedback_service import FaissFeedbackService
+    from utils.s3_helper import FeedbackHandler
+    
+    faiss_service = FaissFeedbackService()
+    
+    return FeedbackHandler(use_s3=True, faiss_service=faiss_service)
 
 def calculate_detailed_stats(feedback_handler):
     """Calculate detailed statistics from feedback data using FeedbackHandler methods"""
@@ -45,21 +64,24 @@ def calculate_detailed_stats(feedback_handler):
             }
         
         total_entries = stats.get('total_entries', 0)
-        correct_predictions = stats.get('correct_predictions', 0)
+        
+        # Fix: The new FeedbackHandler returns 'accuracy' directly, not 'correct_predictions'
         accuracy = stats.get('accuracy', 0)
+        correct_predictions = int(total_entries * accuracy) if total_entries > 0 else 0
         
         # Calculate additional metrics
         incorrect_predictions = total_entries - correct_predictions
         total_corrections = incorrect_predictions
         
-        # Get recent feedback count
+        # Use configuration for recent feedback days
         try:
-            recent_feedback = feedback_handler.get_recent_feedback(days=30)
-            recent_feedback_count = len(recent_feedback) if recent_feedback else 0
-        except:
+            recent_feedback = feedback_handler.get_recent_feedback(days=Config.DEFAULT_FEEDBACK_DAYS)
+            recent_feedback_count = len(recent_feedback) if not recent_feedback.empty else 0
+        except Exception as e:
+            logger.error(f"Error getting recent feedback: {str(e)}")
             recent_feedback_count = 0
         
-        return {
+        result = {
             'total_entries': total_entries,
             'correct_predictions': correct_predictions,
             'incorrect_predictions': incorrect_predictions,
@@ -67,6 +89,9 @@ def calculate_detailed_stats(feedback_handler):
             'total_corrections': total_corrections,
             'recent_feedback_count': recent_feedback_count
         }
+        
+        logger.debug(f"Calculated stats: {result}")
+        return result
         
     except Exception as e:
         logger.error(f"Error calculating detailed stats: {str(e)}")
@@ -82,8 +107,8 @@ def calculate_detailed_stats(feedback_handler):
 def get_feedback_summary(feedback_handler):
     """Get feedback summary using FeedbackHandler methods"""
     try:
-        # Get recent feedback for analysis
-        recent_feedback = feedback_handler.get_recent_feedback(days=30)
+        # Use configuration for recent feedback days
+        recent_feedback = feedback_handler.get_recent_feedback(days=Config.DEFAULT_FEEDBACK_DAYS)
         
         if recent_feedback.empty:
             return {
@@ -99,9 +124,10 @@ def get_feedback_summary(feedback_handler):
 
         logger.debug(f"recent feedback:\n{recent_feedback.head()}")  # Log first few entries for debugging
 
-        for entry in recent_feedback.itertuples():
-            predicted = entry.predicted_code
-            correct = entry.correct_code
+        # Use iterrows() instead of itertuples() for better compatibility
+        for _, row in recent_feedback.iterrows():
+            predicted = row['predicted_code']
+            correct = row['correct_code']
 
             if predicted != correct:
                 recent_corrections += 1
@@ -110,16 +136,19 @@ def get_feedback_summary(feedback_handler):
                 else:
                     corrected_codes[correct] = 1
         
-        # Get top corrected codes
-        top_corrected = sorted(corrected_codes.items(), key=lambda x: x[1], reverse=True)[:5]
+        # Use configuration for top corrected codes count
+        top_corrected = sorted(corrected_codes.items(), key=lambda x: x[1], reverse=True)[:Config.DASHBOARD_TOP_CORRECTIONS_COUNT]
         correction_rate = (recent_corrections / recent_entries * 100) if recent_entries > 0 else 0
         
-        return {
+        result = {
             'recent_entries': recent_entries,
             'recent_corrections': recent_corrections,
             'top_corrected_codes': top_corrected,
             'correction_rate': correction_rate
         }
+        
+        logger.debug(f"Feedback summary: {result}")
+        return result
         
     except Exception as e:
         logger.error(f"Error getting feedback summary: {str(e)}")
@@ -763,6 +792,16 @@ try:
             detailed_stats = calculate_detailed_stats(feedback_handler)
             feedback_summary = get_feedback_summary(feedback_handler)
             
+            # Add FAISS statistics if available
+            faiss_stats = {}
+            if hasattr(classifier, 'faiss_service') and classifier.faiss_service:
+                try:
+                    faiss_stats = classifier.faiss_service.get_feedback_stats()
+                    logger.debug(f"FAISS stats: {faiss_stats}")
+                except Exception as e:
+                    logger.error(f"Error getting FAISS stats: {str(e)}")
+                    faiss_stats = {}
+            
             # Main KPI Cards
             col1, col2, col3 = st.columns(3)
             
@@ -845,6 +884,50 @@ try:
                 """, unsafe_allow_html=True)
             
             st.markdown('</div>', unsafe_allow_html=True)
+            
+            # FAISS Performance Section
+            if faiss_stats and faiss_stats.get('faiss_available', False):
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.markdown('<div class="card-header">FAISS Vector Database Performance</div>', unsafe_allow_html=True)
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown(f"""
+                    <div class="stat-card">
+                        <div class="stat-value">{faiss_stats.get('total_vectors', 0)}</div>
+                        <div class="stat-label">Total Vectors</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"""
+                    <div class="stat-card">
+                        <div class="stat-value">{faiss_stats.get('total_corrections', 0)}</div>
+                        <div class="stat-label">Feedback Corrections</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col3:
+                    faiss_status = "✅ Active" if faiss_stats.get('is_initialized', False) else "❌ Inactive"
+                    st.markdown(f"""
+                    <div class="stat-card">
+                        <div class="stat-value" style="font-size: 1.5rem;">{faiss_status}</div>
+                        <div class="stat-label">FAISS Status</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # FAISS Performance Details
+                st.markdown(f"""
+                <div style="margin: 1rem 0; padding: 1rem; background: #f8f9fa; border-radius: 6px;">
+                    <h4>FAISS Configuration</h4>
+                    <p><strong>Index Type:</strong> {faiss_stats.get('index_type', 'Unknown')}</p>
+                    <p><strong>Embedding Model:</strong> {faiss_stats.get('embedding_model', 'Unknown')}</p>
+                    <p><strong>Initialized:</strong> {'Yes' if faiss_stats.get('is_initialized', False) else 'No'}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
             
             # Performance Overview
             if detailed_stats['total_entries'] > 0:

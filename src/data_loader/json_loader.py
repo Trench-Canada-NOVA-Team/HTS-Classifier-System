@@ -12,30 +12,6 @@ class HTSDataLoader:
         self.hts_data = []
         self.hts_code_map = {}
         
-        # # Enhanced trade agreement mappings
-        # self.trade_agreements = {
-        #     'CA': 'USMCA',    # Canada under USMCA
-        #     'MX': 'USMCA',    # Mexico under USMCA
-        #     'EU': 'EU',       # European Union countries
-        #     'KR': 'KORUS',    # South Korea under KORUS
-        #     'AU': 'AUFTA',    # Australia under AUFTA
-        #     'SG': 'SGFTA',    # Singapore under SGFTA
-        #     'IL': 'ILFTA'     # Israel under ILFTA
-        # }
-        
-        # # Special rate indicators
-        # self.special_rate_indicators = {
-        #     'S': 'Special rate applies',
-        #     'P': 'Preferential tariff program',
-        #     'D': 'Developing country preference',
-        #     'A': 'AUFTA rate',
-        #     'CA': 'USMCA (Canada)',
-        #     'MX': 'USMCA (Mexico)',
-        #     'K': 'KORUS rate',
-        #     'SG': 'Singapore FTA rate',
-        #     'IL': 'Israel FTA rate'
-        # }
-        
         # Initialize product mappings
         self.product_mappings = {
             # Leather goods (Chapter 42)
@@ -61,36 +37,6 @@ class HTSDataLoader:
             ('robot', 'industrial'): ['8428.70']  # Industrial robots
         }
         
-        # EU country mappings
-        # self.eu_countries = {
-        #     'AT': 'Austria',
-        #     'BE': 'Belgium',
-        #     'BG': 'Bulgaria',
-        #     'HR': 'Croatia',
-        #     'CY': 'Cyprus',
-        #     'CZ': 'Czech Republic',
-        #     'DK': 'Denmark',
-        #     'EE': 'Estonia',
-        #     'FI': 'Finland',
-        #     'FR': 'France',
-        #     'DE': 'Germany',
-        #     'GR': 'Greece',
-        #     'HU': 'Hungary',
-        #     'IE': 'Ireland',
-        #     'IT': 'Italy',
-        #     'LV': 'Latvia',
-        #     'LT': 'Lithuania',
-        #     'LU': 'Luxembourg',
-        #     'MT': 'Malta',
-        #     'NL': 'Netherlands',
-        #     'PL': 'Poland',
-        #     'PT': 'Portugal',
-        #     'RO': 'Romania',
-        #     'SK': 'Slovakia',
-        #     'SI': 'Slovenia',
-        #     'ES': 'Spain',
-        #     'SE': 'Sweden'
-        # }
         
         self.load_all_chapters()
         
@@ -234,105 +180,3 @@ class HTSDataLoader:
                 matching_codes.update(codes)
         
         return list(matching_codes)
-    
-    # def get_country_specific_rate(self, hts_code: str, country_code: str) -> Dict:
-    #     """Get country-specific duty rate information with enhanced special rate handling."""
-    #     base_info = self.get_hts_code_info(hts_code)
-        
-    #     # Default response with more detailed information
-    #     rate_info = {
-    #         'rate': base_info.get('general', 'N/A'),
-    #         'trade_agreement': None,
-    #         'special_provisions': [],
-    #         'country_name': None,
-    #         'special_indicators': [],
-    #         'rate_notes': []
-    #     }
-        
-    #     # Extract special rate indicators
-    #     special_text = base_info.get('special', '').lower()
-    #     for indicator, meaning in self.special_rate_indicators.items():
-    #         if indicator.lower() in special_text:
-    #             rate_info['special_indicators'].append(meaning)
-        
-    #     # Get applicable trade agreement
-    #     trade_agreement = self.trade_agreements.get(country_code)
-    #     if trade_agreement:
-    #         rate_info['trade_agreement'] = trade_agreement
-            
-    #         # Process specific trade agreement rates
-    #         if trade_agreement == 'USMCA':
-    #             self._process_usmca_rate(rate_info, base_info, country_code)
-    #         elif trade_agreement == 'EU':
-    #             self._process_eu_rate(rate_info, base_info, country_code)
-    #         else:
-    #             self._process_other_fta_rate(rate_info, base_info, country_code)
-                
-    #     # Add any applicable footnotes
-    #     if base_info.get('footnotes'):
-    #         rate_info['rate_notes'].extend(base_info['footnotes'])
-            
-    #     return rate_info
-        
-    # def _process_usmca_rate(self, rate_info: Dict, base_info: Dict, country_code: str):
-    #     """Process USMCA-specific rates."""
-    #     special_text = base_info.get('special', '').lower()
-    #     country_indicator = country_code.lower()
-        
-    #     if f"{country_indicator}:free" in special_text:
-    #         rate_info['rate'] = 'Free'
-    #     elif country_indicator in special_text:
-    #         # Extract specific rate for the country if available
-    #         rate_match = re.search(f"{country_indicator}:([0-9.]+%?)", special_text)
-    #         if rate_match:
-    #             rate_info['rate'] = rate_match.group(1)
-    #         else:
-    #             rate_info['rate'] = 'See General Rate'
-        
-    #     rate_info['country_name'] = 'Canada' if country_code == 'CA' else 'Mexico'
-        
-    # def _process_eu_rate(self, rate_info: Dict, base_info: Dict, country_code: str):
-    #     """Process EU-specific rates."""
-    #     special_text = base_info.get('special', '').lower()
-        
-    #     if 'eu:free' in special_text:
-    #         rate_info['rate'] = 'Free'
-    #     elif 'eu' in special_text:
-    #         # Extract EU-specific rate if available
-    #         rate_match = re.search(r"eu:([0-9.]+%?)", special_text)
-    #         if rate_match:
-    #             rate_info['rate'] = rate_match.group(1)
-    #         else:
-    #             rate_info['rate'] = self._get_eu_rate(base_info)
-        
-    #     rate_info['country_name'] = self.eu_countries.get(country_code, 'European Union')
-        
-    # def _process_other_fta_rate(self, rate_info: Dict, base_info: Dict, country_code: str):
-    #     """Process rates for other Free Trade Agreements."""
-    #     special_text = base_info.get('special', '').lower()
-    #     agreement_code = self.trade_agreements[country_code].lower()
-        
-    #     if f"{agreement_code}:free" in special_text:
-    #         rate_info['rate'] = 'Free'
-    #     elif agreement_code in special_text:
-    #         # Extract agreement-specific rate if available
-    #         rate_match = re.search(f"{agreement_code}:([0-9.]+%?)", special_text)
-    #         if rate_match:
-    #             rate_info['rate'] = rate_match.group(1)
-    #         else:
-    #             rate_info['rate'] = 'See Special Rate Provisions'
-        
-    #     # Add any specific notes for this trade agreement
-    #     if base_info.get('special'):
-    #         rate_info['special_provisions'].append(f"Special provisions under {self.trade_agreements[country_code]}")
-    
-    # def _get_eu_rate(self, base_info: Dict) -> str:
-    #     """Helper method to determine EU rate when not explicitly specified."""
-    #     if 'EU' in base_info.get('special', ''):
-    #         return 'See EU Special Rate Schedule'
-    #     return base_info.get('general', 'N/A')
-    
-    # def validate_country_code(self, country_code: str) -> bool:
-    #     """Validate if the country code is supported."""
-    #     return (country_code in self.trade_agreements or 
-    #             country_code in self.eu_countries)

@@ -5,12 +5,13 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .hts_classifier import HTSClassifier
-from feedback_handler import FeedbackHandler  # Fixed import
+from utils.s3_helper import FeedbackHandler  # Fixed import
 from utils.s3_feedback_trainer import S3FeedbackTrainer  # Fixed import
+from config import Config  # Import the configuration
 
 
 class FeedbackEnhancedClassifier(HTSClassifier):
-    def __init__(self, data_loader, preprocessor, feedback_handler=None):
+    def __init__(self, data_loader, preprocessor, feedback_handler=None, faiss_service=None):
         """
         Initialize the FeedbackEnhancedClassifier with semantic learning capabilities.
         
@@ -18,21 +19,33 @@ class FeedbackEnhancedClassifier(HTSClassifier):
             data_loader: Data loader instance
             preprocessor: Text preprocessor instance (with OpenAI embeddings)
             feedback_handler: Optional feedback handler instance
+            faiss_service: Optional FAISS service for feedback embeddings
         """
-        super().__init__(data_loader, preprocessor)
+        # Initialize FAISS service first
+        self.faiss_service = faiss_service
+        if self.faiss_service:
+            self.faiss_service.initialize_index()
+            logger.info("FAISS service initialized for enhanced classifier")
         
-        # Initialize feedback handler
-        self.feedback_handler = feedback_handler or FeedbackHandler()
+        # Initialize parent with FAISS service
+        super().__init__(data_loader, preprocessor, faiss_service)
         
-        # Semantic similarity settings
-        self.semantic_threshold = 0.50  # 75% similarity threshold
-        self.high_confidence_threshold = 0.70  # 85% for high confidence matches
-        self.very_high_confidence_threshold = 0.80  # 92% for very high confidence
+        # Initialize feedback handler with FAISS service (no preprocessor parameter)
+        if feedback_handler is None:
+            from utils.s3_helper import FeedbackHandler
+            self.feedback_handler = FeedbackHandler(use_s3=True, faiss_service=self.faiss_service)
+        else:
+            self.feedback_handler = feedback_handler
         
-        # Performance optimization
+        # Use configuration for semantic similarity settings
+        self.semantic_threshold = Config.SEMANTIC_THRESHOLD
+        self.high_confidence_threshold = Config.HIGH_CONFIDENCE_THRESHOLD
+        self.very_high_confidence_threshold = Config.VERY_HIGH_CONFIDENCE_THRESHOLD
+        
+        # Performance optimization settings from config
         self.last_feedback_check = datetime.now()
         self.feedback_cache = {}
-        self.cache_duration = 5  # Cache for 5 minutes
+        self.cache_duration = Config.FEEDBACK_CACHE_DURATION
         
         # Initialize S3 trainer if available
         try:
@@ -166,7 +179,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
     
     def _check_exact_feedback_match(self, product_description: str) -> Optional[Dict]:
         """
-        Check for exact matches in feedback data.
+        Check for exact matches in feedback data using Langchain FAISS first, then fallback.
         
         Args:
             product_description: Product description to check
@@ -175,7 +188,14 @@ class FeedbackEnhancedClassifier(HTSClassifier):
             Dictionary with exact match data or None
         """
         try:
-            # Get recent feedback data
+            # Try Langchain FAISS first if available
+            if self.faiss_service:
+                exact_match = self.faiss_service.check_exact_match(product_description)
+                if exact_match:
+                    logger.info("🎯 Found exact feedback match via Langchain FAISS")
+                    return exact_match
+            
+            # Fallback to original method
             recent_feedback = self._get_recent_feedback_data()
             
             if recent_feedback.empty:
@@ -210,13 +230,48 @@ class FeedbackEnhancedClassifier(HTSClassifier):
     
     def _find_semantic_feedback_matches(self, product_description: str) -> List[Dict]:
         """
-        Find semantically similar products in feedback data using OpenAI embeddings.
+        Find semantically similar products using Langchain FAISS first, then fallback to re-embedding.
         
         Args:
             product_description: Product description to find matches for
             
         Returns:
             List of similar feedback matches with similarity scores
+        """
+        try:
+            # Try Langchain FAISS first if available
+            if self.faiss_service:
+                logger.info("🤖 Using Langchain FAISS for semantic feedback matching")
+                
+                # Search using Langchain FAISS (no manual embedding needed)
+                semantic_matches = self.faiss_service.search_similar_feedback(
+                    product_description, 
+                    top_k=10, 
+                    similarity_threshold=self.semantic_threshold
+                )
+                
+                if semantic_matches:
+                    # Add confidence scores
+                    for match in semantic_matches:
+                        match['confidence'] = self._calculate_semantic_confidence(match['similarity_score'])
+                    
+                    logger.info(f"🤖 Langchain FAISS found {len(semantic_matches)} semantic matches")
+                    return semantic_matches
+                else:
+                    logger.info("🤖 No semantic matches found in Langchain FAISS")
+            
+            # Fallback to original re-embedding method
+            logger.info("🤖 Falling back to re-embedding method for semantic matching")
+            return self._find_semantic_feedback_matches_fallback(product_description)
+            
+        except Exception as e:
+            logger.error(f"Error finding semantic feedback matches via Langchain: {str(e)}")
+            # Fallback to original method
+            return self._find_semantic_feedback_matches_fallback(product_description)
+    
+    def _find_semantic_feedback_matches_fallback(self, product_description: str) -> List[Dict]:
+        """
+        Original semantic matching method using re-embedding (fallback).
         """
         try:
             # Get recent feedback data
@@ -266,7 +321,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
             return semantic_matches
             
         except Exception as e:
-            logger.error(f"Error finding semantic feedback matches: {str(e)}")
+            logger.error(f"Error finding semantic feedback matches (fallback): {str(e)}")
             return []
     
     def _calculate_cosine_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
@@ -445,16 +500,19 @@ class FeedbackEnhancedClassifier(HTSClassifier):
         
         return enhanced_results
     
-    def _get_recent_feedback_data(self, days: int = 30) -> pd.DataFrame:
+    def _get_recent_feedback_data(self, days: int = None) -> pd.DataFrame:
         """
         Get recent feedback data from the feedback handler with caching.
         
         Args:
-            days: Number of days to retrieve
+            days: Number of days to retrieve (uses config default if not provided)
             
         Returns:
             DataFrame with recent feedback data
         """
+        # Use configuration default if not provided
+        days = days or Config.DEFAULT_FEEDBACK_DAYS
+        
         try:
             # Check cache first
             cache_key = f"feedback_data_{days}d"
@@ -602,7 +660,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
     
     def add_feedback(self, product_description: str, predicted_code: str, correct_code: str) -> bool:
         """
-        Add feedback and trigger immediate learning update.
+        Add feedback and trigger immediate learning update including FAISS.
         
         Args:
             product_description: Product description
@@ -615,7 +673,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
         try:
             logger.info(f"📝 Adding feedback: '{product_description}' | {predicted_code} → {correct_code}")
             
-            # Add feedback using the feedback handler
+            # Add feedback using the feedback handler (which will also update FAISS)
             self.feedback_handler.add_feedback(
                 description=product_description,
                 predicted_code=predicted_code,

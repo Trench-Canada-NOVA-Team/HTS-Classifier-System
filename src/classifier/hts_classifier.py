@@ -10,10 +10,9 @@ from utils.common import extract_chapter_info
 from utils.logging_utils import log_classification_attempt, log_feedback_addition
 from data_loader.json_loader import HTSDataLoader
 from preprocessor.text_processor import TextPreprocessor
-from feedback_handler import FeedbackHandler
 
 class HTSClassifier:
-    def __init__(self, data_loader: HTSDataLoader, preprocessor: TextPreprocessor):
+    def __init__(self, data_loader: HTSDataLoader, preprocessor: TextPreprocessor, faiss_service=None):
         """Initialize the HTS classifier."""
         self.data_loader = data_loader
         self.preprocessor = preprocessor
@@ -23,7 +22,10 @@ class HTSClassifier:
         # Initialize services
         self.embedding_service = EmbeddingService()
         self.gpt_service = GPTValidationService()
-        self.feedback_handler = FeedbackHandler()
+        
+        # Import and initialize feedback handler (no preprocessor parameter)
+        from utils.s3_helper import FeedbackHandler
+        self.feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
         
     def build_index(self):
         """Build the search index with improved caching."""

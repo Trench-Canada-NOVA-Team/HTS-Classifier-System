@@ -10,18 +10,24 @@ from io import StringIO
 import boto3
 
 class FeedbackHandler:
-    def __init__(self, use_s3=True, feedback_file_path=None):
+    def __init__(self, use_s3=True, feedback_file_path=None, faiss_service=None):
         """Initialize the feedback handler.
         
         Args:
             use_s3 (bool): Whether to use S3 storage. Defaults to True.
             feedback_file_path (str, optional): Path to store feedback data locally.
-                Defaults to 'Data/feedback_data.csv'.
+            faiss_service: Optional Langchain FaissFeedbackService instance for vector storage
         """
         load_dotenv()
         
         self.use_s3 = use_s3
         self.s3_available = False
+        self.faiss_service = faiss_service
+        
+        # Initialize FAISS service if available
+        if self.faiss_service:
+            self.faiss_service.initialize_index()
+            logger.info("Langchain FAISS service initialized for feedback handler")
         
         # Always set up local storage as fallback
         if feedback_file_path is None:
@@ -163,7 +169,7 @@ class FeedbackHandler:
             raise
     
     def add_feedback(self, description, predicted_code, correct_code):
-        """Add new feedback entry."""
+        """Add new feedback entry and update Langchain FAISS index."""
         try:
             logger.info("Adding feedback...")
             df = self._load_feedback_data()
@@ -178,12 +184,62 @@ class FeedbackHandler:
             df = pd.concat([df, new_entry], ignore_index=True)
             self._save_feedback_data(df)
             
+            # Add to Langchain FAISS index if available
+            if self.faiss_service:
+                try:
+                    # Add to Langchain FAISS (no manual embedding needed)
+                    feedback_entry = {
+                        'description': description,
+                        'predicted_code': predicted_code,
+                        'correct_code': correct_code,
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    
+                    success = self.faiss_service.add_feedback_embedding(feedback_entry)
+                    if success:
+                        logger.info("Added feedback to Langchain FAISS index")
+                    else:
+                        logger.warning("Failed to add feedback to Langchain FAISS index")
+                        
+                except Exception as e:
+                    logger.error(f"Error adding feedback to Langchain FAISS: {str(e)}")
+            
             storage_location = "S3" if (self.use_s3 and self.s3_available) else "local file"
             logger.info(f"Added new feedback entry for HTS code: {correct_code} to {storage_location}")
             
         except Exception as e:
             logger.error(f"Error adding feedback: {str(e)}")
             raise
+
+    def rebuild_faiss_from_existing_data(self, days: int = 365) -> bool:
+        """Rebuild Langchain FAISS index from existing feedback data."""
+        try:
+            if not self.faiss_service:
+                logger.warning("Langchain FAISS service not available")
+                return False
+            
+            # Get existing feedback data
+            feedback_df = self.get_recent_feedback(days=days)
+            
+            if feedback_df.empty:
+                logger.info("No feedback data available for Langchain FAISS rebuild")
+                return True
+            
+            logger.info(f"Rebuilding Langchain FAISS index from {len(feedback_df)} feedback entries")
+            
+            # Rebuild FAISS index using Langchain (no manual embeddings needed)
+            success = self.faiss_service.rebuild_from_feedback_data(feedback_df)
+            
+            if success:
+                logger.info("Successfully rebuilt Langchain FAISS index from existing feedback data")
+            else:
+                logger.error("Failed to rebuild Langchain FAISS index")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error rebuilding Langchain FAISS from existing data: {str(e)}")
+            return False
 
     def get_feedback_data_for_training(self) -> pd.DataFrame:
         """Get feedback data specifically for training purposes."""
