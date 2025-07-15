@@ -16,6 +16,7 @@ class Config:
     DATA_DIR = BASE_DIR / "Data"
     LOGS_DIR = BASE_DIR / "logs"
     CACHE_DIR = BASE_DIR / "cache"
+
     
     # OpenAI Configuration
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -59,6 +60,15 @@ class Config:
     MAX_RETRIES = 3
     BASE_DELAY = 1  # seconds
     LOG_ROTATION = "500 MB"
+
+    # Log file names - centralized configuration
+    MAIN_LOG_FILE = "HTS_Classifier.log"
+    TEST_LOG_FILE = "test_classifier.log"
+    STREAMLIT_LOG_FILE = "HTS_Classifier.log"
+    
+    # Log retention settings
+    LOG_RETENTION_DAYS = "30 days"
+    LOG_COMPRESSION = "zip"
     
     # Dashboard Settings
     DASHBOARD_RECENT_ENTRIES_COUNT = 10
