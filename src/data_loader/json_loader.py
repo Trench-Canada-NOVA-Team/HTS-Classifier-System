@@ -4,6 +4,7 @@ import glob
 from pathlib import Path
 from loguru import logger
 import re
+from config.settings import HTSMappings
 
 class HTSDataLoader:
     def __init__(self, data_dir: str):
@@ -11,32 +12,11 @@ class HTSDataLoader:
         self.data_dir = Path(data_dir)
         self.hts_data = []
         self.hts_code_map = {}
+
+        hts_mappings = HTSMappings()
         
         # Initialize product mappings
-        self.product_mappings = {
-            # Leather goods (Chapter 42)
-            ('wallet', 'leather'): ['4202.31', '4202.32'],  # Wallets and similar items
-            ('handbag', 'leather'): ['4202.21', '4202.22'],  # Handbags
-            ('briefcase', 'leather'): ['4202.11', '4202.12'],  # Briefcases
-            ('suitcase', 'leather'): ['4202.11', '4202.12'],  # Suitcases
-            
-            # Aluminum building components (Chapter 76)
-            ('window', 'aluminum'): ['7610.10'],  # Windows and frames
-            ('door', 'aluminum'): ['7610.10'],    # Doors and frames
-            ('frame', 'aluminum'): ['7610.10'],   # Frames
-            
-            # Apparel (Chapter 61)
-            ('t-shirt', 'cotton'): ['6109.10'],   # Cotton t-shirts
-            ('t-shirt', 'knit'): ['6109.90'],     # Other t-shirts
-            ('sweater', 'cotton'): ['6110.20'],   # Cotton sweaters
-            ('sweater', 'wool'): ['6110.11'],     # Wool sweaters
-            
-            # Electronics (Chapter 85)
-            ('solar panel', ''): ['8541.43'],     # Solar panels
-            ('coffee maker', ''): ['8516.71'],    # Coffee makers
-            ('robot', 'industrial'): ['8428.70']  # Industrial robots
-        }
-        
+        self.product_mappings = hts_mappings.PRODUCT_MAPPINGS
         
         self.load_all_chapters()
         
