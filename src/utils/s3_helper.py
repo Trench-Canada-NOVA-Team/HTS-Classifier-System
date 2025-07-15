@@ -7,6 +7,7 @@ import boto3
 from io import StringIO
 from typing import Dict, Optional
 from config.settings import Config
+from utils.common import format_hts_code
 
 class S3Helper:
     """Helper class for S3 operations."""
@@ -410,9 +411,8 @@ class FeedbackHandler:
     @staticmethod
     def format_hs_code(code):
         """Format HTS code with proper structure."""
-        digits = ''.join(filter(str.isdigit, code))[:12]  # remove non-digits, limit to 12 chars
-        sections = [digits[i:j] for i, j in [(0, 4), (4, 6), (6, 8), (8, 10)] if i < len(digits)]
-        return '.'.join(sections)
+        # Use the centralized format_hts_code function
+        return format_hts_code(code)
 
     def get_feedback_stats(self):
         """Get statistics about collected feedback."""

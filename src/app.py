@@ -10,40 +10,71 @@ import time
 from config.settings import Config
 from loguru import logger
 import pandas as pd
+from utils.logging_utils import setup_logger, log_system_startup, log_system_error
+
+# Initialize logging for Streamlit app
+@st.cache_resource
+def initialize_logging():
+    """Initialize logging for the Streamlit application."""
+    try:
+        setup_logger("streamlit_app")  # This will now use Config.STREAMLIT_LOG_FILE
+        log_system_startup("Streamlit HTS Classification App")
+        return True
+    except Exception as e:
+        st.error(f"Failed to setup logging: {e}")
+        return False
 
 @st.cache_resource
 def initialize_classifier():
-    data_dir = Path(__file__).parent.parent / "Data"
-    data_loader = HTSDataLoader(str(data_dir))
-    preprocessor = TextPreprocessor()
+    # Initialize logging first
+    initialize_logging()
     
-    # Initialize Langchain FAISS service for feedback
-    from services.faiss_feedback_service import FaissFeedbackService
-    faiss_service = FaissFeedbackService()
+    try:
+        log_system_startup("Classifier Initialization")
+        
+        data_dir = Path(__file__).parent.parent / "Data"
+        data_loader = HTSDataLoader(str(data_dir))
+        preprocessor = TextPreprocessor()
+        
+        # Initialize Langchain FAISS service for feedback
+        from services.faiss_feedback_service import FaissFeedbackService
+        faiss_service = FaissFeedbackService()
+        
+        # Initialize feedback handler with Langchain FAISS (no preprocessor parameter)
+        feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
+        
+        # Initialize enhanced classifier with Langchain FAISS
+        classifier = FeedbackEnhancedClassifier(data_loader, preprocessor, feedback_handler, faiss_service)
+        classifier.build_index()
+        
+        # Rebuild Langchain FAISS from existing feedback data if needed
+        if faiss_service.get_feedback_stats()['total_vectors'] == 0:
+            logger.info("Langchain FAISS index is empty, rebuilding from existing feedback data...")
+            feedback_handler.rebuild_faiss_from_existing_data()
+        
+        logger.info("Classifier initialization completed successfully")
+        return classifier, data_loader
     
-    # Initialize feedback handler with Langchain FAISS (no preprocessor parameter)
-    feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
-    
-    # Initialize enhanced classifier with Langchain FAISS
-    classifier = FeedbackEnhancedClassifier(data_loader, preprocessor, feedback_handler, faiss_service)
-    classifier.build_index()
-    
-    # Rebuild Langchain FAISS from existing feedback data if needed
-    if faiss_service.get_feedback_stats()['total_vectors'] == 0:
-        logger.info("Langchain FAISS index is empty, rebuilding from existing feedback data...")
-        feedback_handler.rebuild_faiss_from_existing_data()
-    
-    return classifier, data_loader
+    except Exception as e:
+        log_system_error("Classifier Initialization", str(e))
+        raise
 
 @st.cache_resource
 def initialize_feedback_handler():
     """Initialize the feedback handler with S3 and Langchain FAISS support"""
-    from services.faiss_feedback_service import FaissFeedbackService
-    from utils.s3_helper import FeedbackHandler
+    try:
+        from services.faiss_feedback_service import FaissFeedbackService
+        from utils.s3_helper import FeedbackHandler
+        
+        faiss_service = FaissFeedbackService()
+        feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
+        
+        logger.info("Feedback handler initialized successfully")
+        return feedback_handler
     
-    faiss_service = FaissFeedbackService()
-    
-    return FeedbackHandler(use_s3=True, faiss_service=faiss_service)
+    except Exception as e:
+        log_system_error("Feedback Handler Initialization", str(e))
+        raise
 
 def calculate_detailed_stats(feedback_handler):
     """Calculate detailed statistics from feedback data using FeedbackHandler methods"""

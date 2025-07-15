@@ -186,3 +186,4 @@ USER_GUIDE.md
 data_scraping/extracted_text/
 data_scraping/invoice_sections/
 accuracy_eval/
+cleaned_material_groups(in).csv
