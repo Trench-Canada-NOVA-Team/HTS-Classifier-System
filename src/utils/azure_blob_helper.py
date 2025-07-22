@@ -12,15 +12,33 @@ from utils.common import format_hts_code
 class AzureBlobHelper:
     """Helper class for Azure Blob Storage operations."""
     
+    # def __init__(self):
+    #     """Initialize Azure Blob helper with configuration."""
+    #     self.container_name = Config.AZURE_CONTAINER_NAME
+    #     # self.feedback_blob_key = "feedback-data-canada.csv"
+    #     self.feedback_blob_key = Config.AZURE_FEEDBACK_BLOB_KEY
+        
+    #     # Initialize using connection string
+    #     self.blob_service_client = BlobServiceClient.from_connection_string(
+    #         Config.AZURE_STORAGE_CONNECTION_STRING
+    #     )
+    #     self.azure_client = self.blob_service_client.get_blob_client(
+    #         container=self.container_name, 
+    #         blob=self.feedback_blob_key
+    #     )
     def __init__(self):
         """Initialize Azure Blob helper with configuration."""
+        # Use Config values instead of environment variables
         self.container_name = Config.AZURE_CONTAINER_NAME
-        self.feedback_blob_key = "feedback-data-canada.csv"
+        self.feedback_blob_key = Config.AZURE_FEEDBACK_BLOB_KEY
+        
+        # Keep connection string from environment (sensitive)
+        connection_string = Config.AZURE_STORAGE_CONNECTION_STRING
+        if not connection_string:
+            raise ValueError("AZURE_STORAGE_CONNECTION_STRING not found in environment variables")
         
         # Initialize using connection string
-        self.blob_service_client = BlobServiceClient.from_connection_string(
-            Config.AZURE_STORAGE_CONNECTION_STRING
-        )
+        self.blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self.azure_client = self.blob_service_client.get_blob_client(
             container=self.container_name, 
             blob=self.feedback_blob_key
