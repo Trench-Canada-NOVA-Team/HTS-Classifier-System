@@ -14,7 +14,7 @@ st.markdown("""
 <style>
     /* Main background - Very Light Blue */
     .stApp {
-        background: linear-gradient(135deg, #e0f2fe 0%, #b3e5fc 100%);
+        background: linear-gradient(135deg, #e0f2fe 0%, #FFFFF 100%);
         color: #333;
     }
     
@@ -189,7 +189,7 @@ def main():
     # Add header image
     try:
         # Display header image
-        header_image_path = current_dir / "assets" / "header-image.jpeg"
+        header_image_path = current_dir / "assets" / "header-image.png"
         if header_image_path.exists():
             st.image(str(header_image_path), use_container_width=True)
         else:

@@ -43,7 +43,7 @@ class GPTValidationService:
                     messages=[
                         {
                             "role": "system", 
-                            "content": "You are an expert US HTS classification system. Analyze product descriptions and HTS codes, then return only a confidence score between 0-100."
+                            "content": "You are an expert US HTS classification system for a company that designs and manufactures electrical transformers, reactors, and bushings, as well as related parts and subcomponents. Analyze product descriptions and HTS codes, then return only a confidence score between 0-100."
                         },
                         {"role": "user", "content": prompt}
                     ],
@@ -122,35 +122,59 @@ class GPTValidationService:
         general_rate = hts_info.get('general_rate', 'N/A') or 'N/A'
         context_info = f"\nProduct Category: {chapter_context}" if chapter_context else ""
         
-        return f"""As an expert in US Harmonized Tariff Schedule (HTS) classification, analyze the following product-code match.
+        return f"""You are an expert in US Harmonized Tariff Schedule (HTS) classification with experience in electrical components, transformers, bushings, reactors, and related subassemblies.
 
-Product Description: {product_description}{context_info}
+Please validate the following proposed HTS code classification.
+
+---
+Product Description:
+{product_description}
+{context_info}
 
 Candidate HTS Classification:
 - Code: {hts_info['hts_code']}
 - Official Description: {hts_info['description']}
 - Duty Rate: {general_rate}
 - Units of Measurement: {', '.join(hts_info.get('units', [])) if hts_info.get('units') else 'N/A'}
+---
 
-Important Category Guidelines:
-1. Leather wallets, handbags, and similar containers belong in Chapter 42 (4202)
-2. Aluminum doors, windows, and frames belong in heading 7610
-3. T-shirts and similar garments belong in heading 6109
-4. Industrial robots belong in heading 8428 or 8479
+Instructions:
 
-Evaluate the match considering:
-1. Product Specificity: How precisely does the HTS description match the product details?
-2. Category Alignment: Is this the correct category chapter/heading for this type of product?
-3. Material & Characteristics: Do any specified materials or characteristics align?
-4. Usage/Purpose: Does the intended use match the HTS category purpose?
+1. **Product Specificity:**  
+   - Assess how closely the HTS description matches the product details, **paying special attention to critical values such as voltage and power rating (e.g., kVA, kW, volts)**, as these frequently determine the correct subheading.
+2. **Category Alignment:**  
+   - Determine if this chapter/heading is appropriate for the product type.
+3. **Material & Characteristics:**  
+   - Check if the described materials and product characteristics, **including any specified electrical ratings (e.g., voltage, kVA, insulation class, frequency)**, align.
+4. **Usage/Purpose:**  
+   - Evaluate if the product's intended function fits the HTS code's intended use.
 
-Return only a number between 0 and 100 representing your confidence in this classification match.
+**Scoring:**  
+Return only a single number between 0 and 100, representing your confidence in this classification match.  
 Example confidence scores:
-- 95-100: Perfect match with exact terminology
-- 80-94: Very good match with minor variations
-- 60-79: Good match but some details differ
-- 40-59: Partial match with significant differences
-- 0-39: Poor match or wrong category"""
+- 95-100: Perfect match with exact terminology and use
+- 80-94: Very good match, minor differences only
+- 60-79: Good match, but details differ or lack evidence
+- 40-59: Partial match, significant differences
+- 0-39: Poor match or wrong category
+
+**Important Category Guidelines (for reference):**
+- Electric transformers are generally classified in Chapter 85, heading 8504.21, **with subheadings often based on voltage and kVA ratings**. unless specified as a **part**, any description of a transformer should be treated as a **complete unit**.
+- The stated voltage or kVA rating in the description is defined as **exactly that**, and **not exceeding** that value
+- **If the power handling capacity (such as kVA, kW, or similar) in the product description does not exactly match the value stated in the HTS code description from the context, return only the subheading (the first 6-8 digits) as the code.**
+- Bushings and similar insulating fittings often fall under 8546.20.
+- Air core reactors fall within 8504.90, but review product specifics, especially electrical ratings.
+- Electrical parts and subassemblies should be considered for headings 8504, 8546, or other relevant chapters, depending on their function and electrical properties.
+
+**Additional Critical Instructions:**
+- If you are not sure about the subheading (the 5th and 6th or 7th and 8th digits), or if there is insufficient evidence for a specific sub-classification (such as missing voltage or kVA rating), return only the preceding digits (e.g., "8504" or "8504.21") as the code.
+- If your confidence score is below 80, or if the match is not strong, return the parent heading (the first 4 digits) to avoid over-specific classification.
+- Be critical and conservative. When in doubt, prefer a broader heading to avoid misclassification.
+
+**Format:**
+Return only the confidence score (0-100).
+"""
+
     
     def _apply_category_adjustments(self, confidence: float, description: str, hts_code: str) -> float:
         """Apply category-specific confidence adjustments."""
