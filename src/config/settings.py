@@ -41,12 +41,12 @@ class Config:
     AZURE_STORAGE_ACCOUNT_NAME=os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
     AZURE_CONTAINER_NAME=os.getenv('AZURE_CONTAINER_NAME')
 
-    # AWS S3 Configuration
-    AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME')
-    AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
-    AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-    AWS_REGION = os.getenv('AWS_REGION', 'us-west-1')
-    S3_FEEDBACK_KEY = 'feedback/feedback_data.csv'
+    # # AWS S3 Configuration
+    # AWS_BUCKET_NAME = os.getenv('AWS_BUCKET_NAME')
+    # AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+    # AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+    # AWS_REGION = os.getenv('AWS_REGION', 'us-west-1')
+    # S3_FEEDBACK_KEY = 'feedback/feedback_data.csv'
     
     # Classification Settings
     SEMANTIC_THRESHOLD = 0.50

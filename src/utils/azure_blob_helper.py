@@ -9,7 +9,7 @@ from typing import Dict, Optional
 from config.settings import Config
 from utils.common import format_hts_code
 
-class AzureBlobHelper:  # Renamed from S3Helper
+class AzureBlobHelper:
     """Helper class for Azure Blob Storage operations."""
     
     def __init__(self):
@@ -163,7 +163,7 @@ class AzureBlobHelper:  # Renamed from S3Helper
                                 arcname = str(file_path.relative_to(local_faiss_path))
                                 zipf.write(str(file_path), arcname)
                 
-                # Upload the zip file to S3
+                # Upload the zip file to Azure Blob Storage
                 index_key = 'feedback/langchain_faiss_index.zip'
                 with open(tmp_zip.name, 'rb') as f:
                     self.azure_client.upload_blob(
@@ -244,19 +244,19 @@ class AzureBlobHelper:  # Renamed from S3Helper
             return True
             
         except Exception as e:
-            logger.error(f"Error downloading Langchain FAISS index from S3: {str(e)}")
+            logger.error(f"Error downloading Langchain FAISS index from Azure Blob Storage: {str(e)}")
             return False
     
 class FeedbackHandler:
-    def __init__(self, use_azure=True, faiss_service=None):  # Changed from use_s3
+    def __init__(self, use_azure=True, faiss_service=None):
         """Initialize the feedback handler.
         
         Args:
             use_azure (bool): Whether to use Azure Blob Storage. Defaults to True.
             faiss_service: Optional Langchain FaissFeedbackService instance for vector storage
         """
-        self.use_azure = use_azure  # Changed from use_s3
-        self.azure_available = False  # Changed from s3_available
+        self.use_azure = use_azure
+        self.azure_available = False
         self.faiss_service = faiss_service
         
         # Initialize FAISS service if available
@@ -266,10 +266,10 @@ class FeedbackHandler:
         
         if self.use_azure:
             try:
-                self.azure_helper = AzureBlobHelper()  # Changed from S3Helper
-                self.azure_helper.initialize_container()  # Changed method name
+                self.azure_helper = AzureBlobHelper()
+                self.azure_helper.initialize_container()
                 self.azure_available = True
-                self._initialize_azure_blob_feedback_file()  # Changed method name
+                self._initialize_azure_blob_feedback_file()
                 logger.info("Azure Blob Storage initialized successfully")
             except Exception as e:
                 logger.error(f"Failed to initialize Azure Blob Storage: {str(e)}")

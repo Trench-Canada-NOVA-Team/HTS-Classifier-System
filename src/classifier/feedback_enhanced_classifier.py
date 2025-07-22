@@ -49,12 +49,12 @@ class FeedbackEnhancedClassifier(HTSClassifier):
         
         # Initialize Azure trainer if available
         try:
-            self.s3_trainer = AzureFeedbackTrainer(feedback_handler)
+            self.azure_trainer = AzureFeedbackTrainer(feedback_handler)
             self.auto_retrain_enabled = True
-            logger.info("S3FeedbackTrainer initialized successfully")
+            logger.info("AzureFeedbackTrainer initialized successfully")
         except Exception as e:
-            logger.warning(f"S3FeedbackTrainer initialization failed: {str(e)}")
-            self.s3_trainer = None
+            logger.warning(f"AzureFeedbackTrainer initialization failed: {str(e)}")
+            self.azure_trainer = None
             self.auto_retrain_enabled = False
         
         logger.info("FeedbackEnhancedClassifier initialized with semantic learning capabilities")
