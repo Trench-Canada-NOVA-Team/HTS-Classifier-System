@@ -12,11 +12,11 @@ import pandas as pd
 
 from langchain_community.vectorstores import FAISS
 try:
-    from langchain_openai import OpenAIEmbeddings
+    from langchain_openai import AzureOpenAIEmbeddings
 except ImportError:
     # Fallback to deprecated import if new package not available
-    from langchain_community.embeddings import OpenAIEmbeddings
-    logger.warning("Using deprecated OpenAIEmbeddings. Consider upgrading: pip install langchain-openai")
+    from langchain_community.embeddings import OpenAIEmbeddings as AzureOpenAIEmbeddings
+    logger.warning("Using deprecated AzureOpenAIEmbeddings. Consider upgrading: pip install langchain-openai")
 
 from langchain.docstore.document import Document
 from langchain.schema import BaseRetriever
@@ -28,7 +28,7 @@ class FaissFeedbackService:
     
     def __init__(self, openai_api_key: str = None):
         """Initialize FAISS feedback service with Langchain."""
-        self.openai_api_key = openai_api_key or Config.OPENAI_API_KEY
+        self.openai_api_key = openai_api_key or Config.AZURE_OPENAI_API_KEY
         self.faiss_available = True
         
         # Test FAISS availability first
@@ -45,14 +45,16 @@ class FaissFeedbackService:
             self.faiss_available = False
             return
         
-        # Initialize Langchain OpenAI embeddings
+        # Initialize Langchain Azure OpenAI embeddings
         try:
-            self.embeddings = OpenAIEmbeddings(
-                openai_api_key=self.openai_api_key,
-                model=Config.OPENAI_EMBEDDING_MODEL
+            self.embeddings = AzureOpenAIEmbeddings(
+                openai_api_key=Config.AZURE_OPENAI_API_KEY,
+                azure_endpoint=Config.AZURE_OPENAI_ENDPOINT,
+                api_version=Config.AZURE_OPENAI_API_VERSION,
+                model=Config.AZURE_OPENAI_EMBEDDING_MODEL
             )
         except Exception as e:
-            logger.error(f"Failed to initialize OpenAI embeddings: {str(e)}")
+            logger.error(f"Failed to initialize Azure OpenAI embeddings: {str(e)}")
             self.faiss_available = False
             return
         
@@ -64,7 +66,7 @@ class FaissFeedbackService:
         self.faiss_index_path = Config.DATA_DIR / Config.FAISS_INDEX_NAME
         self.metadata_path = Config.DATA_DIR / Config.FAISS_METADATA_NAME
         
-        logger.info("FaissFeedbackService initialized with Langchain framework")
+        logger.info("FaissFeedbackService initialized with Langchain framework using Azure OpenAI")
     
     def initialize_index(self) -> bool:
         """Initialize or load existing Langchain FAISS index."""
@@ -349,7 +351,7 @@ class FaissFeedbackService:
                 'total_vectors': total_vectors,
                 'total_corrections': total_corrections,
                 'index_type': 'Langchain FAISS',
-                'embedding_model': Config.OPENAI_EMBEDDING_MODEL,
+                'embedding_model': Config.AZURE_OPENAI_EMBEDDING_MODEL,
                 'is_initialized': self.is_initialized,
                 'faiss_available': self.faiss_available
             }

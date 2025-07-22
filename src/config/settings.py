@@ -18,11 +18,18 @@ class Config:
     CACHE_DIR = BASE_DIR / "cache"
 
     
-    # OpenAI Configuration
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-    OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-    OPENAI_CHAT_MODEL = "gpt-4"
+    # Azure OpenAI Configuration
+    AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY')
+    AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
+    AZURE_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+    AZURE_OPENAI_CHAT_MODEL = "gpt-4"
+    AZURE_OPENAI_API_VERSION = "2024-12-01-preview"
     
+    # Legacy OpenAI Configuration (kept for fallback)
+    # OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    # OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+    # OPENAI_CHAT_MODEL = "gpt-4"
+
     # Pinecone Configuration
     PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
     PINECONE_INDEX_NAME = "hts-codes"
@@ -158,3 +165,46 @@ class HTSMappings:
         "8541": "Semiconductor devices, LEDs, solar cells",
         "8428": "Lifting, handling, loading machinery; industrial robots"
     }
+
+
+# Remove these commented sections (lines 216-258):
+
+# # Add electrical equipment contexts
+#     ELECTRICAL_EQUIPMENT_CONTEXTS = {
+#         "transformer": "Electrical power equipment for voltage conversion",
+#         "bushing": "Electrical insulating component for high voltage equipment",
+#         "insulator": "Electrical insulation component preventing current flow",
+#         "core": "Magnetic core for electrical transformers",
+#         "winding": "Electrical coil assembly for transformers",
+#         "ct": "Current transformer for electrical measurement",
+#         "terminal": "Electrical connection component",
+#     }
+    
+#     MATERIAL_CONTEXTS = {
+#         "porcelain": "Ceramic material for electrical insulation",
+#         "aluminum": "Lightweight metal for electrical housings",
+#         "kraft paper": "Insulating paper for electrical equipment",
+#         "crepe paper": "Flexible insulating material",
+#         "rubber": "Sealing and insulating material",
+#     }
+
+
+# Before Mappings:
+# Input: "al ct bushing"
+# AI sees: "al ct bushing" (confusing abbreviations)
+
+# After Mappings:
+# Input: "al ct bushing" 
+# → Material replacement: "aluminum current transformer electrical bushing"
+# AI sees: Clear, descriptive terms that match HTS vocabulary
+
+# Mapping flow
+# Input: "cem porc 123kV insulator" -> Frontend
+# ↓
+# Material Replacement: "camantic porcelain 123kV insulator" -> Backend
+# ↓
+# Product Mapping: ('insulator', 'porcelain') → ['8546.20'] -> Backend
+# ↓
+# RAG Search(classification flow): Within Chapter 8546.20.XX.XX subset to find complete 10-digit code -> Backend
+# ↓
+# Final Result: 8546.20.00.40 (complete 10-digit HTS code) -> Frontend

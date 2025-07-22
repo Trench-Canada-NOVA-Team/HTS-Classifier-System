@@ -15,9 +15,10 @@ langchain-openai>=0.1.0
 numpy>=1.21.0,<2.0.0
 faiss-cpu>=1.7.0,<1.8.0
 
-# AWS Services
+# Cloud Services
 boto3>=1.28.0
 s3fs>=2024.6.1
+azure-storage-blob==12.19.0
 
 # Core Dependencies
 loguru>=0.6.0
