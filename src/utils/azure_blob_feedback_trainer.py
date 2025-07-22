@@ -4,18 +4,17 @@ from datetime import datetime, timedelta
 from loguru import logger
 import json
 
-
-class S3FeedbackTrainer:
+class AzureFeedbackTrainer:
     """
-    Utility class for training and analytics using S3-stored feedback data.
+    Utility class for training and analytics using Azure Blob Storage feedback data.
     """
     
     def __init__(self, feedback_handler, faiss_service=None):
         """
-        Initialize the S3 feedback trainer.
+        Initialize the Azure feedback trainer.
         
         Args:
-            feedback_handler: FeedbackHandler instance with S3 capabilities
+            feedback_handler: AzureFeedbackHandler instance with Azure capabilities
             faiss_service: Optional FaissFeedbackService instance
         """
         self.feedback_handler = feedback_handler
@@ -23,7 +22,7 @@ class S3FeedbackTrainer:
         
     def prepare_training_data(self, days: int = 30) -> Dict:
         """
-        Prepare training data from S3 feedback for model improvement.
+        Prepare training data from Azure Blob Storage feedback for model improvement.
         
         Args:
             days: Number of days of feedback to analyze
@@ -32,7 +31,7 @@ class S3FeedbackTrainer:
             Dictionary with training preparation results
         """
         try:
-            logger.info(f"Preparing training data from last {days} days...")
+            logger.info(f"Preparing training data from Azure Blob Storage for last {days} days...")
             
             # Get recent feedback data
             feedback_df = self.feedback_handler.get_recent_feedback(days=days)
@@ -59,13 +58,13 @@ class S3FeedbackTrainer:
                 'problematic_chapters': analysis['problematic_chapters']
             }
             
-            logger.info(f"Training data prepared: {result['total_feedback_entries']} entries analyzed")
+            logger.info(f"Training data prepared from Azure: {result['total_feedback_entries']} entries analyzed")
             return result
             
         except Exception as e:
-            logger.error(f"Error preparing training data: {str(e)}")
+            logger.error(f"Error preparing training data from Azure: {str(e)}")
             return {'success': False, 'error': str(e)}
-    
+
     def _analyze_feedback_data(self, feedback_df: pd.DataFrame) -> Dict:
         """
         Analyze feedback data for training insights.
@@ -192,10 +191,10 @@ class S3FeedbackTrainer:
         except Exception as e:
             logger.error(f"Error generating training insights: {str(e)}")
             return {'recommendations': [], 'priority_areas': []}
-    
+
     def generate_feedback_report(self, days: int = 30, format: str = 'dict') -> Dict:
         """
-        Generate comprehensive feedback report.
+        Generate comprehensive feedback report from Azure Blob Storage.
         
         Args:
             days: Number of days to include in report
@@ -205,12 +204,12 @@ class S3FeedbackTrainer:
             Comprehensive feedback report
         """
         try:
-            logger.info(f"Generating feedback report for last {days} days...")
+            logger.info(f"Generating feedback report from Azure for last {days} days...")
             
             # Get feedback data and metrics
             feedback_df = self.feedback_handler.get_recent_feedback(days=days)
-            quality_metrics = self.feedback_handler.get_feedback_quality_metrics(days=days)
-            correction_patterns = self.feedback_handler.get_correction_patterns(days=days)
+            quality_metrics = self.feedback_handler.get_feedback_quality_metrics(days=days) if hasattr(self.feedback_handler, 'get_feedback_quality_metrics') else {}
+            correction_patterns = self.feedback_handler.get_correction_patterns(days=days) if hasattr(self.feedback_handler, 'get_correction_patterns') else {}
             
             report = {
                 'report_generated': datetime.now().isoformat(),
@@ -220,7 +219,7 @@ class S3FeedbackTrainer:
                     'total_corrections': quality_metrics.get('total_corrections', 0),
                     'correction_rate': quality_metrics.get('correction_rate', 0),
                     'data_freshness': quality_metrics.get('data_freshness'),
-                    'storage_location': "S3" if self.feedback_handler.s3_available else "Local"
+                    'storage_location': "Azure Blob Storage" if self.feedback_handler.azure_available else "Local"  # Changed from s3_available
                 },
                 'quality_metrics': quality_metrics,
                 'correction_patterns': correction_patterns,
@@ -245,9 +244,9 @@ class S3FeedbackTrainer:
                 return report
                 
         except Exception as e:
-            logger.error(f"Error generating feedback report: {str(e)}")
+            logger.error(f"Error generating feedback report from Azure: {str(e)}")
             return {'error': str(e)}
-    
+
     def _export_to_csv(self, feedback_df: pd.DataFrame, report: Dict) -> Dict:
         """
         Export feedback data and report to CSV format.
@@ -340,3 +339,4 @@ class S3FeedbackTrainer:
         except Exception as e:
             logger.error(f"Error getting Langchain FAISS performance metrics: {str(e)}")
             return {'langchain_faiss_available': False, 'error': str(e)}
+

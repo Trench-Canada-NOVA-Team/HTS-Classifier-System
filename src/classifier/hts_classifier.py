@@ -24,8 +24,8 @@ class HTSClassifier:
         self.gpt_service = GPTValidationService()
         
         # Import and initialize feedback handler (no preprocessor parameter)
-        from utils.s3_helper import FeedbackHandler
-        self.feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
+        from utils.azure_blob_helper import FeedbackHandler
+        self.feedback_handler = FeedbackHandler(use_azure=True, faiss_service=faiss_service)
         
     def build_index(self):
         """Build the search index with improved caching."""

@@ -7,7 +7,7 @@ from .common import (
     validate_hts_code_format
 )
 from .logging_utils import setup_logger, log_classification_attempt, log_feedback_addition
-from .s3_helper import S3Helper, FeedbackHandler
+from .azure_blob_helper import AzureBlobHelper, FeedbackHandler
 
 __all__ = [
     'format_hts_code', 

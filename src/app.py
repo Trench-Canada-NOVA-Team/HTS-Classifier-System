@@ -4,7 +4,7 @@ from pathlib import Path
 from data_loader.json_loader import HTSDataLoader
 from preprocessor.text_processor import TextPreprocessor
 from classifier.feedback_enhanced_classifier import FeedbackEnhancedClassifier
-from utils.s3_helper import FeedbackHandler
+from utils.azure_blob_helper import FeedbackHandler
 from services.proof_service import ProofService
 import time
 from config.settings import Config
@@ -41,7 +41,7 @@ def initialize_classifier():
         faiss_service = FaissFeedbackService()
         
         # Initialize feedback handler with Langchain FAISS (no preprocessor parameter)
-        feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
+        feedback_handler = FeedbackHandler(use_azure=True, faiss_service=faiss_service)
         
         # Initialize enhanced classifier with Langchain FAISS
         classifier = FeedbackEnhancedClassifier(data_loader, preprocessor, feedback_handler, faiss_service)
@@ -61,13 +61,13 @@ def initialize_classifier():
 
 @st.cache_resource
 def initialize_feedback_handler():
-    """Initialize the feedback handler with S3 and Langchain FAISS support"""
+    """Initialize the feedback handler with Azure Blob Storage and Langchain FAISS support"""
     try:
         from services.faiss_feedback_service import FaissFeedbackService
-        from utils.s3_helper import FeedbackHandler
+        from utils.azure_blob_helper import FeedbackHandler
         
         faiss_service = FaissFeedbackService()
-        feedback_handler = FeedbackHandler(use_s3=True, faiss_service=faiss_service)
+        feedback_handler = FeedbackHandler(use_azure=True, faiss_service=faiss_service)
         
         logger.info("Feedback handler initialized successfully")
         return feedback_handler
@@ -1014,7 +1014,7 @@ try:
                             <p><strong>System Uptime:</strong> 99.9%</p>
                             <p><strong>Learning Status:</strong> Active</p>
                             <p><strong>Database Status:</strong> Online</p>
-                            <p><strong>S3 Storage:</strong> Connected</p>
+                            <p><strong>Azure Blob Storage:</strong> Connected</p>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)

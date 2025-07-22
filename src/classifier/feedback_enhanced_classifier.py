@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from .hts_classifier import HTSClassifier
-from utils.s3_helper import FeedbackHandler
-from utils.s3_feedback_trainer import S3FeedbackTrainer
+from utils.azure_blob_helper import FeedbackHandler
+from utils.azure_blob_feedback_trainer import AzureFeedbackTrainer
 from config.settings import Config  # Import the configuration
 
 
@@ -32,7 +32,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
         
         # Initialize feedback handler with FAISS service (no preprocessor parameter)
         if feedback_handler is None:
-            from utils.s3_helper import FeedbackHandler
+            from utils.azure_blob_helper import FeedbackHandler
             self.feedback_handler = FeedbackHandler(use_s3=True, faiss_service=self.faiss_service)
         else:
             self.feedback_handler = feedback_handler
@@ -47,9 +47,9 @@ class FeedbackEnhancedClassifier(HTSClassifier):
         self.feedback_cache = {}
         self.cache_duration = Config.FEEDBACK_CACHE_DURATION
         
-        # Initialize S3 trainer if available
+        # Initialize Azure trainer if available
         try:
-            self.s3_trainer = S3FeedbackTrainer(feedback_handler)
+            self.s3_trainer = AzureFeedbackTrainer(feedback_handler)
             self.auto_retrain_enabled = True
             logger.info("S3FeedbackTrainer initialized successfully")
         except Exception as e:

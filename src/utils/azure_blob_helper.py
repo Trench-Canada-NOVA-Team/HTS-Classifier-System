@@ -3,131 +3,152 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 from loguru import logger
-import boto3
-from io import StringIO
+from azure.storage.blob import BlobServiceClient, BlobClient
+from io import StringIO, BytesIO
 from typing import Dict, Optional
 from config.settings import Config
 from utils.common import format_hts_code
 
-class S3Helper:
-    """Helper class for S3 operations."""
+class AzureBlobHelper:  # Renamed from S3Helper
+    """Helper class for Azure Blob Storage operations."""
     
     def __init__(self):
-        """Initialize S3 helper with configuration."""
-        self.bucket_name = Config.AWS_BUCKET_NAME
-        self.s3_key = Config.S3_FEEDBACK_KEY
+        """Initialize Azure Blob helper with configuration."""
+        self.container_name = Config.AZURE_CONTAINER_NAME
+        self.feedback_blob_key = "feedback-data-canada.csv"
         
-        self.s3_client = boto3.client(
-            's3',
-            aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY,
-            region_name=Config.AWS_REGION
+        # Initialize using connection string
+        self.blob_service_client = BlobServiceClient.from_connection_string(
+            Config.AZURE_STORAGE_CONNECTION_STRING
         )
-    
-    def initialize_bucket(self) -> bool:
-        """Initialize S3 bucket and test connection."""
+        self.azure_client = self.blob_service_client.get_blob_client(
+            container=self.container_name, 
+            blob=self.feedback_blob_key
+        )
+
+    def initialize_container(self) -> bool:
+        """Initialize Azure Blob container and test connection."""
         try:
-            self.s3_client.list_objects_v2(Bucket=self.bucket_name, MaxKeys=1)
-            logger.info("S3 connection test successful")
+            # Test connection by listing blobs
+            container_client = self.blob_service_client.get_container_client(self.container_name)
+            list(container_client.list_blobs())
+            logger.info("Azure Blob Storage connection test successful")
             return True
         except Exception as e:
-            logger.error(f"S3 connection test failed: {str(e)}")
+            logger.error(f"Azure Blob Storage connection test failed: {str(e)}")
             return False
     
     def read_feedback(self) -> pd.DataFrame:
-        """Read feedback data from S3."""
+        """Read feedback data from Azure Blob Storage."""
         try:
-            response = self.s3_client.get_object(Bucket=self.bucket_name, Key=self.s3_key)
-            content = response['Body'].read().decode('utf-8')
+            blob_client = self.blob_service_client.get_blob_client(
+                container=self.container_name, 
+                blob=self.feedback_blob_key
+            )
+            blob_data = blob_client.download_blob()
+            content = blob_data.content_as_text()
             return pd.read_csv(StringIO(content))
         except Exception as e:
-            if 'NoSuchKey' in str(e) or '404' in str(e):
-                logger.info("Feedback file not found in S3, creating empty DataFrame")
+            if 'BlobNotFound' in str(e) or '404' in str(e):
+                logger.info("Feedback file not found in Azure Blob Storage, creating empty DataFrame")
                 return pd.DataFrame(columns=['timestamp', 'description', 'predicted_code', 'correct_code'])
             else:
-                logger.error(f"Error reading from S3: {str(e)}")
+                logger.error(f"Error reading from Azure Blob Storage: {str(e)}")
                 raise
-    
+
     def upload_feedback(self, df: pd.DataFrame) -> None:
-        """Upload feedback DataFrame to S3."""
+        """Upload feedback DataFrame to Azure Blob Storage."""
         try:
             csv_buffer = StringIO()
             df.to_csv(csv_buffer, index=False)
             
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=self.s3_key,
-                Body=csv_buffer.getvalue()
+            blob_client = self.blob_service_client.get_blob_client(
+                container=self.container_name,
+                blob=self.feedback_blob_key
             )
-            logger.info("Successfully saved feedback data to S3")
+            
+            blob_client.upload_blob(
+                csv_buffer.getvalue(),
+                overwrite=True
+            )
+            logger.info("Successfully saved feedback data to Azure Blob Storage")
         except Exception as e:
-            logger.error(f"Error saving to S3: {str(e)}")
+            logger.error(f"Error saving to Azure Blob Storage: {str(e)}")
             raise
 
+
     def upload_faiss_index(self, index_path: Path, metadata_path: Path) -> bool:
-        """Upload FAISS index and metadata to S3."""
+        """Upload FAISS index and metadata to Azure Blob Storage."""
         try:
             # Upload FAISS index file
-            index_key = 'feedback/faiss_index.index'
+            index_blob_key = 'feedback/faiss_index.index'
             with open(index_path, 'rb') as f:
-                self.s3_client.put_object(
-                    Bucket=self.bucket_name,
-                    Key=index_key,
-                    Body=f.read()
+                blob_client = self.blob_service_client.get_blob_client(
+                    container=self.container_name,
+                    blob=index_blob_key
                 )
+                blob_client.upload_blob(f.read(), overwrite=True)
             
             # Upload metadata file
-            metadata_key = 'feedback/faiss_metadata.pkl'
+            metadata_blob_key = 'feedback/faiss_metadata.pkl'
             with open(metadata_path, 'rb') as f:
-                self.s3_client.put_object(
-                    Bucket=self.bucket_name,
-                    Key=metadata_key,
-                    Body=f.read()
+                blob_client = self.blob_service_client.get_blob_client(
+                    container=self.container_name,
+                    blob=metadata_blob_key
                 )
+                blob_client.upload_blob(f.read(), overwrite=True)
             
-            logger.info("Successfully uploaded FAISS index and metadata to S3")
+            logger.info("Successfully uploaded FAISS index and metadata to Azure Blob Storage")
             return True
             
         except Exception as e:
-            logger.error(f"Error uploading FAISS index to S3: {str(e)}")
+            logger.error(f"Error uploading FAISS index to Azure Blob Storage: {str(e)}")
             return False
-    
+        
     def download_faiss_index(self, local_index_path: Path, local_metadata_path: Path) -> bool:
-        """Download FAISS index and metadata from S3."""
+        """Download FAISS index and metadata from Azure Blob Storage."""
         try:
             # Download FAISS index file
-            index_key = 'feedback/faiss_index.index'
+            index_blob_key = 'feedback/faiss_index.index'
             try:
-                response = self.s3_client.get_object(Bucket=self.bucket_name, Key=index_key)
+                blob_client = self.blob_service_client.get_blob_client(
+                    container=self.container_name,
+                    blob=index_blob_key
+                )
                 with open(local_index_path, 'wb') as f:
-                    f.write(response['Body'].read())
+                    blob_data = blob_client.download_blob()
+                    f.write(blob_data.readall())
             except Exception as e:
-                if 'NoSuchKey' in str(e):
-                    logger.info("FAISS index not found in S3")
+                if 'BlobNotFound' in str(e):
+                    logger.info("FAISS index not found in Azure Blob Storage")
                     return False
                 raise
             
             # Download metadata file
-            metadata_key = 'feedback/faiss_metadata.pkl'
+            metadata_blob_key = 'feedback/faiss_metadata.pkl'
             try:
-                response = self.s3_client.get_object(Bucket=self.bucket_name, Key=metadata_key)
+                blob_client = self.blob_service_client.get_blob_client(
+                    container=self.container_name,
+                    blob=metadata_blob_key
+                )
                 with open(local_metadata_path, 'wb') as f:
-                    f.write(response['Body'].read())
+                    blob_data = blob_client.download_blob()
+                    f.write(blob_data.readall())
             except Exception as e:
-                if 'NoSuchKey' in str(e):
-                    logger.info("FAISS metadata not found in S3")
+                if 'BlobNotFound' in str(e):
+                    logger.info("FAISS metadata not found in Azure Blob Storage")
                     return False
                 raise
             
-            logger.info("Successfully downloaded FAISS index and metadata from S3")
+            logger.info("Successfully downloaded FAISS index and metadata from Azure Blob Storage")
             return True
             
         except Exception as e:
-            logger.error(f"Error downloading FAISS index from S3: {str(e)}")
+            logger.error(f"Error downloading FAISS index from Azure Blob Storage: {str(e)}")
             return False
-
+    
     def upload_faiss_langchain_index(self, local_faiss_path: Path, local_metadata_path: Path) -> bool:
-        """Upload Langchain FAISS index directory and metadata to S3."""
+        """Upload Langchain FAISS index directory and metadata to Azure Blob."""
         try:
             import zipfile
             import tempfile
@@ -145,10 +166,10 @@ class S3Helper:
                 # Upload the zip file to S3
                 index_key = 'feedback/langchain_faiss_index.zip'
                 with open(tmp_zip.name, 'rb') as f:
-                    self.s3_client.put_object(
-                        Bucket=self.bucket_name,
-                        Key=index_key,
-                        Body=f.read()
+                    self.azure_client.upload_blob(
+                        container_name=self.container_name,
+                        blob_name=index_key,
+                        data=f.read()
                     )
             
             # Clean up temporary file
@@ -157,21 +178,22 @@ class S3Helper:
             # Upload metadata file
             metadata_key = 'feedback/langchain_faiss_metadata.pkl'
             with open(local_metadata_path, 'rb') as f:
-                self.s3_client.put_object(
-                    Bucket=self.bucket_name,
-                    Key=metadata_key,
-                    Body=f.read()
+                self.azure_client.upload_blob(
+                    container_name=self.container_name,
+                    blob_name=metadata_key,
+                    data=f.read()
                 )
-            
-            logger.info("Successfully uploaded Langchain FAISS index and metadata to S3")
+
+            logger.info("Successfully uploaded Langchain FAISS index and metadata to Azure Blob Storage")
             return True
-            
+
         except Exception as e:
-            logger.error(f"Error uploading Langchain FAISS index to S3: {str(e)}")
+            logger.error(f"Error uploading Langchain FAISS index to Azure Blob Storage: {str(e)}")
             return False
+ 
     
     def download_faiss_langchain_index(self, local_faiss_path: Path, local_metadata_path: Path) -> bool:
-        """Download Langchain FAISS index and metadata from S3."""
+        """Download Langchain FAISS index and metadata from Azure Blob Storage."""
         try:
             import zipfile
             import tempfile
@@ -179,8 +201,11 @@ class S3Helper:
             # Download FAISS index zip file
             index_key = 'feedback/langchain_faiss_index.zip'
             try:
-                response = self.s3_client.get_object(Bucket=self.bucket_name, Key=index_key)
-                
+                response = self.azure_client.get_blob(
+                    container_name=self.container_name,
+                    blob_name=index_key
+                )
+
                 # Create temporary file for the zip
                 with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_zip:
                     tmp_zip.write(response['Body'].read())
@@ -195,40 +220,43 @@ class S3Helper:
                 
             except Exception as e:
                 if 'NoSuchKey' in str(e):
-                    logger.info("Langchain FAISS index not found in S3")
+                    logger.info("Langchain FAISS index not found in Azure Blob Storage")
                     return False
                 raise
             
             # Download metadata file
             metadata_key = 'feedback/langchain_faiss_metadata.pkl'
             try:
-                response = self.s3_client.get_object(Bucket=self.bucket_name, Key=metadata_key)
+                response = self.azure_client.get_blob(
+                    container_name=self.container_name,
+                    blob_name=metadata_key
+                )
                 local_metadata_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(local_metadata_path, 'wb') as f:
                     f.write(response['Body'].read())
             except Exception as e:
                 if 'NoSuchKey' in str(e):
-                    logger.info("Langchain FAISS metadata not found in S3")
+                    logger.info("Langchain FAISS metadata not found in Azure Blob Storage")
                     return False
                 raise
-            
-            logger.info("Successfully downloaded Langchain FAISS index and metadata from S3")
+
+            logger.info("Successfully downloaded Langchain FAISS index and metadata from Azure Blob Storage")
             return True
             
         except Exception as e:
             logger.error(f"Error downloading Langchain FAISS index from S3: {str(e)}")
             return False
-
+    
 class FeedbackHandler:
-    def __init__(self, use_s3=True, faiss_service=None):
+    def __init__(self, use_azure=True, faiss_service=None):  # Changed from use_s3
         """Initialize the feedback handler.
         
         Args:
-            use_s3 (bool): Whether to use S3 storage. Defaults to True.
+            use_azure (bool): Whether to use Azure Blob Storage. Defaults to True.
             faiss_service: Optional Langchain FaissFeedbackService instance for vector storage
         """
-        self.use_s3 = use_s3
-        self.s3_available = False
+        self.use_azure = use_azure  # Changed from use_s3
+        self.azure_available = False  # Changed from s3_available
         self.faiss_service = faiss_service
         
         # Initialize FAISS service if available
@@ -236,46 +264,46 @@ class FeedbackHandler:
             self.faiss_service.initialize_index()
             logger.info("Langchain FAISS service initialized for feedback handler")
         
-        if self.use_s3:
+        if self.use_azure:
             try:
-                self.s3_helper = S3Helper()
-                self.s3_helper.initialize_bucket()
-                self.s3_available = True
-                self._initialize_s3_feedback_file()
-                logger.info("S3 storage initialized successfully")
+                self.azure_helper = AzureBlobHelper()  # Changed from S3Helper
+                self.azure_helper.initialize_container()  # Changed method name
+                self.azure_available = True
+                self._initialize_azure_blob_feedback_file()  # Changed method name
+                logger.info("Azure Blob Storage initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize S3: {str(e)}")
+                logger.error(f"Failed to initialize Azure Blob Storage: {str(e)}")
                 logger.info("Falling back to local storage")
-                self.use_s3 = False
-                self.s3_available = False
+                self.use_azure = False
+                self.azure_available = False
         
-        if not self.s3_available:
+        if not self.azure_available:
             self.feedback_file = Config.DATA_DIR / "feedback_data.csv"
             self._initialize_feedback_file()
-    
-    def _initialize_s3_feedback_file(self):
-        """Create feedback file in S3 if it doesn't exist."""
-        if not self.s3_available:
+
+    def _initialize_azure_blob_feedback_file(self):
+        """Create feedback file in Azure Blob Storage if it doesn't exist."""
+        if not self.azure_available:
             return
             
         try:
-            # Check if file exists in S3
+            # Check if file exists in Azure Blob Storage
             try:
-                self.s3_helper.s3_client.head_object(Bucket=self.s3_helper.bucket_name, Key=self.s3_helper.s3_key)
-                logger.info(f"Feedback file found in S3: {self.s3_helper.s3_key}")
+                self.azure_helper.azure_client.get_blob_properties()
+                logger.info(f"Feedback file found in Azure Blob Storage: {self.azure_helper.feedback_blob_key}")
             except Exception as e:
-                if '404' in str(e) or 'NoSuchKey' in str(e):
+                if '404' in str(e) or 'The specified blob does not exist.' in str(e):
                     # File doesn't exist, create it
-                    logger.info(f"Feedback file not found in S3, creating: {self.s3_helper.s3_key}")
+                    logger.info(f"Feedback file not found in Azure Blob Storage, creating: {self.azure_helper.feedback_blob_key}")
                     df = pd.DataFrame(columns=['timestamp', 'description', 'predicted_code', 'correct_code'])
-                    self.s3_helper.upload_feedback(df)
-                    logger.info(f"Created new feedback file in S3: {self.s3_helper.s3_key}")
+                    self.azure_helper.upload_feedback(df)
+                    logger.info(f"Created new feedback file in Azure Blob Storage: {self.azure_helper.feedback_blob_key}")
                 else:
                     raise
         except Exception as e:
-            logger.error(f"Error initializing S3 feedback file: {str(e)}")
-            self.use_s3 = False
-            self.s3_available = False
+            logger.error(f"Error initializing Azure Blob Storage feedback file: {str(e)}")
+            self.use_azure = False
+            self.azure_available = False
             self.feedback_file = Config.DATA_DIR / "feedback_data.csv"
             self._initialize_feedback_file()
 
@@ -292,8 +320,8 @@ class FeedbackHandler:
     def _load_feedback_data(self):
         """Load existing feedback data."""
         try:
-            if self.use_s3:
-                return self.s3_helper.read_feedback()
+            if self.use_azure:
+                return self.azure_helper.read_feedback()
             else:
                 return pd.read_csv(self.feedback_file)
         except Exception as e:
@@ -303,8 +331,8 @@ class FeedbackHandler:
     
     def _save_feedback_data(self, df):
         """Save feedback data."""
-        if self.use_s3:
-            self.s3_helper.upload_feedback(df)
+        if self.use_azure:
+            self.azure_helper.upload_feedback(df)
         else:
             df.to_csv(self.feedback_file, index=False)
     
@@ -343,8 +371,8 @@ class FeedbackHandler:
                         
                 except Exception as e:
                     logger.error(f"Error adding feedback to Langchain FAISS: {str(e)}")
-            
-            storage_location = "S3" if (self.use_s3 and self.s3_available) else "local file"
+
+            storage_location = "Azure Blob Storage" if (self.use_azure and self.azure_available) else "local file"
             logger.info(f"Added new feedback entry for HTS code: {correct_code} to {storage_location}")
             
         except Exception as e:
@@ -426,7 +454,7 @@ class FeedbackHandler:
                     "accuracy": 0,
                     "correct_predictions": 0,
                     "recent_entries": [],
-                    "storage_location": "S3" if (self.use_s3 and self.s3_available) else "local file"
+                    "storage_location": "Azure Blob Storage" if (self.use_azure and self.azure_available) else "local file"
                 }
             
             total = len(df)
@@ -451,7 +479,7 @@ class FeedbackHandler:
                 "correct_predictions": correct,
                 "accuracy": accuracy,
                 "recent_entries": recent_entries,
-                "storage_location": "S3" if (self.use_s3 and self.s3_available) else "local file"
+                "storage_location": "Azure Blob Storage" if (self.use_azure and self.azure_available) else "local file"
             }
             
             logger.debug(f"Returning feedback stats: {result}")
