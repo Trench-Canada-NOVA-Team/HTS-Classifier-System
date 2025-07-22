@@ -5,7 +5,7 @@ import numpy as np
 import time
 from typing import List, Tuple, Optional
 from pathlib import Path
-from openai import OpenAI, APIError, RateLimitError
+from openai import AzureOpenAI, APIError, RateLimitError
 from pinecone.grpc import PineconeGRPC as Pinecone
 from pinecone import ServerlessSpec
 from loguru import logger
@@ -19,19 +19,23 @@ class EmbeddingService:
     
     def __init__(self):
         """Initialize the embedding service."""
-        self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
+        self.client = AzureOpenAI(
+            api_key=Config.AZURE_OPENAI_API_KEY,
+            api_version=Config.AZURE_OPENAI_API_VERSION,
+            azure_endpoint=Config.AZURE_OPENAI_ENDPOINT
+        )
         self.pc = Pinecone(api_key=Config.PINECONE_API_KEY)
         self.index_name = Config.PINECONE_INDEX_NAME
         self.cache_service = CacheService()
     
     def encode_texts(self, texts: List[str]) -> np.ndarray:
-        """Encode text descriptions using OpenAI embeddings."""
+        """Encode text descriptions using Azure OpenAI embeddings."""
         try:
             embeddings = []
             for i in range(0, len(texts), Config.BATCH_SIZE):
                 batch = texts[i:i + Config.BATCH_SIZE]
                 response = self.client.embeddings.create(
-                    model=Config.OPENAI_EMBEDDING_MODEL,
+                    model=Config.AZURE_OPENAI_EMBEDDING_MODEL,
                     input=batch,
                     encoding_format="float"
                 )
@@ -40,7 +44,7 @@ class EmbeddingService:
                 
             return np.array(embeddings)
         except Exception as e:
-            logger.error(f"Error encoding text with OpenAI: {str(e)}")
+            logger.error(f"Error encoding text with Azure OpenAI: {str(e)}")
             raise
     
     def get_cached_embeddings(self, descriptions: List[str], hts_codes: List[str]) -> Tuple[Optional[np.ndarray], Optional[List[str]], Optional[List[str]]]:
@@ -131,11 +135,4 @@ class EmbeddingService:
         except Exception as e:
             logger.error(f"Error searching Pinecone: {str(e)}")
             raise
-            return index.query(
-                vector=query_embedding.tolist(),
-                top_k=top_k,
-                include_metadata=True
-            )
-        except Exception as e:
-            logger.error(f"Error searching Pinecone: {str(e)}")
-            raise
+            

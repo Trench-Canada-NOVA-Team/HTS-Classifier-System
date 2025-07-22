@@ -4,7 +4,7 @@ GPT service for HTS code validation and confidence scoring.
 import time
 import re
 from typing import Dict
-from openai import OpenAI, APIError, RateLimitError
+from openai import AzureOpenAI, APIError, RateLimitError
 from loguru import logger
 
 from config.settings import Config
@@ -15,7 +15,11 @@ class GPTValidationService:
     
     def __init__(self):
         """Initialize the GPT service."""
-        self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
+        self.client = AzureOpenAI(
+            api_key=Config.AZURE_OPENAI_API_KEY,
+            api_version=Config.AZURE_OPENAI_API_VERSION,
+            azure_endpoint=Config.AZURE_OPENAI_ENDPOINT
+        )
     
     def validate_hts_match(self, product_description: str, hts_info: Dict, 
                           chapter_context: str = "") -> float:
@@ -39,7 +43,7 @@ class GPTValidationService:
                 )
                 
                 response = self.client.chat.completions.create(
-                    model=Config.OPENAI_CHAT_MODEL,  # ← Automatically uses your new setting
+                    model=Config.AZURE_OPENAI_CHAT_MODEL,
                     messages=[
                         {
                             "role": "system", 
