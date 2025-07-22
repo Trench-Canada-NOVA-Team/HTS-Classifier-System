@@ -89,7 +89,11 @@ class HTSMappings:
         r'polyvinyl\s+chloride': 'pvc',
         r'poly\s*vinyl\s*chloride': 'pvc'
     }
-    
+
+    # Material Group chapter mappings
+    MATERIAL_GROUP_CHAPTERS = {
+    }
+
     # Product category mappings
     PRODUCT_MAPPINGS = {
         # Resale Products
