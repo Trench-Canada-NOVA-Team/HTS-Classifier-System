@@ -266,21 +266,21 @@ class AzureBlobHelper:
             return False
     
 class FeedbackHandler:
-    def __init__(self, use_azure=True, faiss_service=None):
+    def __init__(self, use_azure=True, pinecone_feedback_service=None):
         """Initialize the feedback handler.
         
         Args:
             use_azure (bool): Whether to use Azure Blob Storage. Defaults to True.
-            faiss_service: Optional Langchain FaissFeedbackService instance for vector storage
+            pinecone_feedback_service: Optional Pinecone feedback service instance for vector storage
         """
         self.use_azure = use_azure
         self.azure_available = False
-        self.faiss_service = faiss_service
+        self.pinecone_feedback_service = pinecone_feedback_service
         
-        # Initialize FAISS service if available
-        if self.faiss_service:
-            self.faiss_service.initialize_index()
-            logger.info("Langchain FAISS service initialized for feedback handler")
+        # Initialize Pinecone feedback service if available
+        if self.pinecone_feedback_service:
+            self.pinecone_feedback_service.initialize_index()
+            logger.info("Pinecone feedback service initialized for feedback handler")
         
         if self.use_azure:
             try:
@@ -355,7 +355,7 @@ class FeedbackHandler:
             df.to_csv(self.feedback_file, index=False)
     
     def add_feedback(self, description, predicted_code, correct_code):
-        """Add new feedback entry and update Langchain FAISS index."""
+        """Add new feedback entry and update Pinecone feedback index."""
         try:
             logger.info("Adding feedback...")
             df = self._load_feedback_data()
@@ -370,10 +370,10 @@ class FeedbackHandler:
             df = pd.concat([df, new_entry], ignore_index=True)
             self._save_feedback_data(df)
             
-            # Add to Langchain FAISS index if available
-            if self.faiss_service:
+            # Add to Pinecone feedback index if available
+            if self.pinecone_feedback_service:
                 try:
-                    # Add to Langchain FAISS (no manual embedding needed)
+                    # Add to Pinecone feedback service
                     feedback_entry = {
                         'description': description,
                         'predicted_code': predicted_code,
@@ -381,14 +381,14 @@ class FeedbackHandler:
                         'timestamp': datetime.now().isoformat()
                     }
                     
-                    success = self.faiss_service.add_feedback_embedding(feedback_entry)
+                    success = self.pinecone_feedback_service.add_feedback_embedding(feedback_entry)
                     if success:
-                        logger.info("Added feedback to Langchain FAISS index")
+                        logger.info("Added feedback to Pinecone feedback index")
                     else:
-                        logger.warning("Failed to add feedback to Langchain FAISS index")
+                        logger.warning("Failed to add feedback to Pinecone feedback index")
                         
                 except Exception as e:
-                    logger.error(f"Error adding feedback to Langchain FAISS: {str(e)}")
+                    logger.error(f"Error adding feedback to Pinecone feedback: {str(e)}")
 
             storage_location = "Azure Blob Storage" if (self.use_azure and self.azure_available) else "local file"
             logger.info(f"Added new feedback entry for HTS code: {correct_code} to {storage_location}")
@@ -397,34 +397,77 @@ class FeedbackHandler:
             logger.error(f"Error adding feedback: {str(e)}")
             raise
 
-    def rebuild_faiss_from_existing_data(self, days: int = 365) -> bool:
-        """Rebuild Langchain FAISS index from existing feedback data."""
+    def should_rebuild_pinecone_feedback_index(self) -> bool:
+        """
+        Check if the Pinecone feedback index should be rebuilt.
+        
+        Returns:
+            True if rebuild is needed, False otherwise
+        """
         try:
-            if not self.faiss_service:
-                logger.warning("Langchain FAISS service not available")
+            if not self.pinecone_feedback_service:
+                logger.info("No Pinecone feedback service available")
                 return False
+            
+            # Check if Pinecone feedback index already has data
+            if self.pinecone_feedback_service.has_existing_data():
+                logger.info("Pinecone feedback index already contains data, no rebuild needed")
+                return False
+            
+            # Check if there's feedback data in Azure that needs to be migrated
+            feedback_df = self.get_recent_feedback(days=365)  # Check all available data
+            
+            if feedback_df.empty:
+                logger.info("No feedback data available for Pinecone feedback rebuild")
+                return False
+            
+            # Count corrections (where predicted != correct)
+            corrections = feedback_df[feedback_df['predicted_code'] != feedback_df['correct_code']]
+            
+            if len(corrections) == 0:
+                logger.info("No corrections found in feedback data, no rebuild needed")
+                return False
+            
+            logger.info(f"Found {len(corrections)} corrections in feedback data, rebuild recommended")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking if Pinecone feedback rebuild is needed: {str(e)}")
+            return False
+
+    def rebuild_pinecone_from_existing_data(self, days: int = 365) -> bool:
+        """Rebuild Pinecone feedback index from existing feedback data."""
+        try:
+            if not self.pinecone_feedback_service:
+                logger.warning("Pinecone feedback service not available")
+                return False
+            
+            # Double-check if rebuild is actually needed
+            if self.pinecone_feedback_service.has_existing_data():
+                logger.info("Pinecone feedback index already contains data, skipping rebuild")
+                return True  # Return True since the index is already populated
             
             # Get existing feedback data
             feedback_df = self.get_recent_feedback(days=days)
             
             if feedback_df.empty:
-                logger.info("No feedback data available for Langchain FAISS rebuild")
+                logger.info("No feedback data available for Pinecone feedback rebuild")
                 return True
             
-            logger.info(f"Rebuilding Langchain FAISS index from {len(feedback_df)} feedback entries")
+            logger.info(f"Rebuilding Pinecone feedback index from {len(feedback_df)} feedback entries")
             
-            # Rebuild FAISS index using Langchain (no manual embeddings needed)
-            success = self.faiss_service.rebuild_from_feedback_data(feedback_df)
+            # Rebuild Pinecone feedback index
+            success = self.pinecone_feedback_service.rebuild_from_feedback_data(feedback_df)
             
             if success:
-                logger.info("Successfully rebuilt Langchain FAISS index from existing feedback data")
+                logger.info("Successfully rebuilt Pinecone feedback index from existing feedback data")
             else:
-                logger.error("Failed to rebuild Langchain FAISS index")
+                logger.error("Failed to rebuild Pinecone feedback index")
             
             return success
             
         except Exception as e:
-            logger.error(f"Error rebuilding Langchain FAISS from existing data: {str(e)}")
+            logger.error(f"Error rebuilding Pinecone feedback from existing data: {str(e)}")
             return False
 
     def get_recent_feedback(self, days: int = None) -> pd.DataFrame:

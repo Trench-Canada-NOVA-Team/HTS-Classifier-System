@@ -32,6 +32,7 @@ class Config:
     # Pinecone Configuration
     PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
     PINECONE_INDEX_NAME = "hts-codes"
+    PINECONE_FEEDBACK_INDEX_NAME = "hts-feedback"  # New feedback index
     PINECONE_CLOUD = "aws"
     PINECONE_REGION = "us-east-1"
     
@@ -48,11 +49,9 @@ class Config:
     FEEDBACK_CACHE_DURATION = 5  # minutes
     DEFAULT_FEEDBACK_DAYS = 30
     
-    # FAISS Configuration
-    FAISS_INDEX_NAME = "feedback_faiss_langchain"
-    FAISS_METADATA_NAME = "feedback_metadata_langchain.pkl"
-    FAISS_SIMILARITY_THRESHOLD = 0.5
-    FAISS_TOP_K_DEFAULT = 5
+    # Pinecone Feedback Configuration
+    PINECONE_FEEDBACK_SIMILARITY_THRESHOLD = 0.5
+    PINECONE_FEEDBACK_TOP_K_DEFAULT = 5
     
     # System Settings
     BATCH_SIZE = 100

@@ -67,49 +67,25 @@ class SemanticMatch:
     confidence: float
 
 @dataclass
-class FaissFeedbackEntry:
-    """Model for FAISS feedback data with embedding info."""
+class PineconeFeedbackEntry:
+    """Model for Pinecone feedback data with vector integration."""
     description: str
     predicted_code: str
     correct_code: str
     similarity_score: float
     timestamp: datetime
-    faiss_id: int
+    pinecone_id: str
     confidence: Optional[float] = None
     
     @classmethod
-    def from_faiss_result(cls, result: Dict[str, Any]) -> 'FaissFeedbackEntry':
-        """Create FaissFeedbackEntry from FAISS search result."""
+    def from_pinecone_result(cls, result: Dict[str, Any]) -> 'PineconeFeedbackEntry':
+        """Create PineconeFeedbackEntry from Pinecone search result."""
         return cls(
             description=result['description'],
             predicted_code=result['predicted_code'],
             correct_code=result['correct_code'],
             similarity_score=result['similarity_score'],
             timestamp=datetime.fromisoformat(result['timestamp']) if isinstance(result['timestamp'], str) else result['timestamp'],
-            faiss_id=result['faiss_id'],
-            confidence=result.get('confidence')
-        )
-
-@dataclass
-class LangchainFaissFeedbackEntry:
-    """Model for Langchain FAISS feedback data with document integration."""
-    description: str
-    predicted_code: str
-    correct_code: str
-    similarity_score: float
-    timestamp: datetime
-    faiss_id: int
-    confidence: Optional[float] = None
-    
-    @classmethod
-    def from_langchain_result(cls, result: Dict[str, Any]) -> 'LangchainFaissFeedbackEntry':
-        """Create LangchainFaissFeedbackEntry from Langchain FAISS search result."""
-        return cls(
-            description=result['description'],
-            predicted_code=result['predicted_code'],
-            correct_code=result['correct_code'],
-            similarity_score=result['similarity_score'],
-            timestamp=datetime.fromisoformat(result['timestamp']) if isinstance(result['timestamp'], str) else result['timestamp'],
-            faiss_id=result['faiss_id'],
+            pinecone_id=result['pinecone_id'],
             confidence=result.get('confidence')
         )

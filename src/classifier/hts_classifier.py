@@ -12,7 +12,7 @@ from data_loader.json_loader import HTSDataLoader
 from preprocessor.text_processor import TextPreprocessor
 
 class HTSClassifier:
-    def __init__(self, data_loader: HTSDataLoader, preprocessor: TextPreprocessor, faiss_service=None):
+    def __init__(self, data_loader: HTSDataLoader, preprocessor: TextPreprocessor, pinecone_feedback_service=None):
         """Initialize the HTS classifier."""
         self.data_loader = data_loader
         self.preprocessor = preprocessor
@@ -23,9 +23,9 @@ class HTSClassifier:
         self.embedding_service = EmbeddingService()
         self.gpt_service = GPTValidationService()
         
-        # Import and initialize feedback handler (no preprocessor parameter)
+        # Import and initialize feedback handler with Pinecone feedback service
         from utils.azure_blob_helper import FeedbackHandler
-        self.feedback_handler = FeedbackHandler(use_azure=True, faiss_service=faiss_service)
+        self.feedback_handler = FeedbackHandler(use_azure=True, pinecone_feedback_service=pinecone_feedback_service)
         
     def build_index(self):
         """Build the search index with improved caching."""
@@ -54,7 +54,7 @@ class HTSClassifier:
                 # Save to cache
                 self.embedding_service.save_embeddings_to_cache(self.descriptions, embeddings, self.hts_codes)
             
-            # Setup Pinecone index
+            # Setup Pinecone index for main production data
             self.embedding_service.setup_pinecone_index(embeddings, self.descriptions, self.hts_codes)
             
         except Exception as e:

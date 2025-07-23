@@ -9,16 +9,16 @@ class AzureFeedbackTrainer:
     Utility class for training and analytics using Azure Blob Storage feedback data.
     """
     
-    def __init__(self, feedback_handler, faiss_service=None):
+    def __init__(self, feedback_handler, pinecone_feedback_service=None):
         """
         Initialize the Azure feedback trainer.
         
         Args:
             feedback_handler: AzureFeedbackHandler instance with Azure capabilities
-            faiss_service: Optional FaissFeedbackService instance
+            pinecone_feedback_service: Optional Pinecone feedback service instance
         """
         self.feedback_handler = feedback_handler
-        self.faiss_service = faiss_service
+        self.pinecone_feedback_service = pinecone_feedback_service
         
     def prepare_training_data(self, days: int = 30) -> Dict:
         """
@@ -219,7 +219,7 @@ class AzureFeedbackTrainer:
                     'total_corrections': quality_metrics.get('total_corrections', 0),
                     'correction_rate': quality_metrics.get('correction_rate', 0),
                     'data_freshness': quality_metrics.get('data_freshness'),
-                    'storage_location': "Azure Blob Storage" if self.feedback_handler.azure_available else "Local"  # Changed from s3_available
+                    'storage_location': "Azure Blob Storage" if self.feedback_handler.azure_available else "Local"
                 },
                 'quality_metrics': quality_metrics,
                 'correction_patterns': correction_patterns,
@@ -319,24 +319,25 @@ class AzureFeedbackTrainer:
             logger.error(f"Error getting training recommendations: {str(e)}")
             return []
     
-    def get_langchain_faiss_performance_metrics(self) -> Dict:
-        """Get performance metrics for Langchain FAISS feedback service."""
+    def get_pinecone_feedback_performance_metrics(self) -> Dict:
+        """Get performance metrics for Pinecone feedback service."""
         try:
-            if not hasattr(self, 'faiss_service') or not self.faiss_service:
-                return {'langchain_faiss_available': False}
+            if not hasattr(self, 'pinecone_feedback_service') or not self.pinecone_feedback_service:
+                return {'pinecone_feedback_available': False}
             
-            faiss_stats = self.faiss_service.get_feedback_stats()
+            pinecone_stats = self.pinecone_feedback_service.get_feedback_stats()
             
             return {
-                'langchain_faiss_available': True,
-                'faiss_total_vectors': faiss_stats.get('total_vectors', 0),
-                'faiss_corrections': faiss_stats.get('total_corrections', 0),
-                'faiss_index_type': faiss_stats.get('index_type', 'Unknown'),
-                'faiss_embedding_model': faiss_stats.get('embedding_model', 'Unknown'),
-                'faiss_initialized': faiss_stats.get('is_initialized', False)
+                'pinecone_feedback_available': True,
+                'pinecone_total_vectors': pinecone_stats.get('total_vectors', 0),
+                'pinecone_corrections': pinecone_stats.get('total_corrections', 0),
+                'pinecone_index_type': pinecone_stats.get('index_type', 'Unknown'),
+                'pinecone_embedding_model': pinecone_stats.get('embedding_model', 'Unknown'),
+                'pinecone_initialized': pinecone_stats.get('is_initialized', False),
+                'pinecone_index_name': pinecone_stats.get('index_name', 'Unknown')
             }
             
         except Exception as e:
-            logger.error(f"Error getting Langchain FAISS performance metrics: {str(e)}")
-            return {'langchain_faiss_available': False, 'error': str(e)}
+            logger.error(f"Error getting Pinecone feedback performance metrics: {str(e)}")
+            return {'pinecone_feedback_available': False, 'error': str(e)}
 

@@ -73,11 +73,11 @@ class EmbeddingService:
     
     def setup_pinecone_index(self, embeddings: np.ndarray, descriptions: List[str], 
                            hts_codes: List[str]) -> None:
-        """Set up Pinecone index with embeddings."""
+        """Set up Pinecone index with embeddings for main production data."""
         try:
-            # Create index if it doesn't exist
+            # Create index if it doesn't exist (using main production index name)
             if self.index_name not in self.pc.list_indexes().names():
-                logger.info("Creating new Pinecone index...")
+                logger.info("Creating new Pinecone production index...")
                 self.pc.create_index(
                     name=self.index_name,
                     dimension=embeddings.shape[1],
@@ -93,13 +93,13 @@ class EmbeddingService:
             # Check if vectors already exist
             stats = index.describe_index_stats()
             if stats.total_vector_count == 0:
-                logger.info("Uploading vectors to Pinecone...")
+                logger.info("Uploading vectors to Pinecone production index...")
                 self._upload_vectors_to_pinecone(index, embeddings, descriptions, hts_codes)
             else:
-                logger.info(f"Using existing Pinecone index with {stats.total_vector_count} vectors")
+                logger.info(f"Using existing Pinecone production index with {stats.total_vector_count} vectors")
                 
         except Exception as e:
-            logger.error(f"Error setting up Pinecone index: {str(e)}")
+            logger.error(f"Error setting up Pinecone production index: {str(e)}")
             raise
     
     def _upload_vectors_to_pinecone(self, index, embeddings: np.ndarray, 
@@ -135,4 +135,4 @@ class EmbeddingService:
         except Exception as e:
             logger.error(f"Error searching Pinecone: {str(e)}")
             raise
-            
+

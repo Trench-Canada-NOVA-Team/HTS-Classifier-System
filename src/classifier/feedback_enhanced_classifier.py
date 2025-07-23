@@ -11,7 +11,7 @@ from config.settings import Config  # Import the configuration
 
 
 class FeedbackEnhancedClassifier(HTSClassifier):
-    def __init__(self, data_loader, preprocessor, feedback_handler=None, faiss_service=None):
+    def __init__(self, data_loader, preprocessor, feedback_handler=None, pinecone_feedback_service=None):
         """
         Initialize the FeedbackEnhancedClassifier with semantic learning capabilities.
         
@@ -19,21 +19,21 @@ class FeedbackEnhancedClassifier(HTSClassifier):
             data_loader: Data loader instance
             preprocessor: Text preprocessor instance (with OpenAI embeddings)
             feedback_handler: Optional feedback handler instance
-            faiss_service: Optional FAISS service for feedback embeddings
+            pinecone_feedback_service: Optional Pinecone feedback service for feedback embeddings
         """
-        # Initialize FAISS service first
-        self.faiss_service = faiss_service
-        if self.faiss_service:
-            self.faiss_service.initialize_index()
-            logger.info("FAISS service initialized for enhanced classifier")
+        # Initialize Pinecone feedback service first
+        self.pinecone_feedback_service = pinecone_feedback_service
+        if self.pinecone_feedback_service:
+            self.pinecone_feedback_service.initialize_index()
+            logger.info("Pinecone feedback service initialized for enhanced classifier")
         
-        # Initialize parent with FAISS service
-        super().__init__(data_loader, preprocessor, faiss_service)
+        # Initialize parent with Pinecone feedback service
+        super().__init__(data_loader, preprocessor, pinecone_feedback_service)
         
-        # Initialize feedback handler with FAISS service (no preprocessor parameter)
+        # Initialize feedback handler with Pinecone feedback service
         if feedback_handler is None:
             from utils.azure_blob_helper import FeedbackHandler
-            self.feedback_handler = FeedbackHandler(use_s3=True, faiss_service=self.faiss_service)
+            self.feedback_handler = FeedbackHandler(use_azure=True, pinecone_feedback_service=self.pinecone_feedback_service)
         else:
             self.feedback_handler = feedback_handler
         
@@ -49,7 +49,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
         
         # Initialize Azure trainer if available
         try:
-            self.azure_trainer = AzureFeedbackTrainer(feedback_handler)
+            self.azure_trainer = AzureFeedbackTrainer(feedback_handler, pinecone_feedback_service)
             self.auto_retrain_enabled = True
             logger.info("AzureFeedbackTrainer initialized successfully")
         except Exception as e:
@@ -179,7 +179,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
     
     def _check_exact_feedback_match(self, product_description: str) -> Optional[Dict]:
         """
-        Check for exact matches in feedback data using Langchain FAISS first, then fallback.
+        Check for exact matches in feedback data using Pinecone first, then fallback.
         
         Args:
             product_description: Product description to check
@@ -188,11 +188,11 @@ class FeedbackEnhancedClassifier(HTSClassifier):
             Dictionary with exact match data or None
         """
         try:
-            # Try Langchain FAISS first if available
-            if self.faiss_service:
-                exact_match = self.faiss_service.check_exact_match(product_description)
+            # Try Pinecone feedback service first if available
+            if self.pinecone_feedback_service:
+                exact_match = self.pinecone_feedback_service.check_exact_match(product_description)
                 if exact_match:
-                    logger.info("🎯 Found exact feedback match via Langchain FAISS")
+                    logger.info("🎯 Found exact feedback match via Pinecone feedback service")
                     return exact_match
             
             # Fallback to original method
@@ -230,7 +230,7 @@ class FeedbackEnhancedClassifier(HTSClassifier):
     
     def _find_semantic_feedback_matches(self, product_description: str) -> List[Dict]:
         """
-        Find semantically similar products using Langchain FAISS first, then fallback to re-embedding.
+        Find semantically similar products using Pinecone feedback service first, then fallback to re-embedding.
         
         Args:
             product_description: Product description to find matches for
@@ -239,12 +239,12 @@ class FeedbackEnhancedClassifier(HTSClassifier):
             List of similar feedback matches with similarity scores
         """
         try:
-            # Try Langchain FAISS first if available
-            if self.faiss_service:
-                logger.info("🤖 Using Langchain FAISS for semantic feedback matching")
+            # Try Pinecone feedback service first if available
+            if self.pinecone_feedback_service:
+                logger.info("🤖 Using Pinecone feedback service for semantic feedback matching")
                 
-                # Search using Langchain FAISS (no manual embedding needed)
-                semantic_matches = self.faiss_service.search_similar_feedback(
+                # Search using Pinecone feedback service
+                semantic_matches = self.pinecone_feedback_service.search_similar_feedback(
                     product_description, 
                     top_k=10, 
                     similarity_threshold=self.semantic_threshold
@@ -255,17 +255,17 @@ class FeedbackEnhancedClassifier(HTSClassifier):
                     for match in semantic_matches:
                         match['confidence'] = self._calculate_semantic_confidence(match['similarity_score'])
                     
-                    logger.info(f"🤖 Langchain FAISS found {len(semantic_matches)} semantic matches")
+                    logger.info(f"🤖 Pinecone feedback service found {len(semantic_matches)} semantic matches")
                     return semantic_matches
                 else:
-                    logger.info("🤖 No semantic matches found in Langchain FAISS")
+                    logger.info("🤖 No semantic matches found in Pinecone feedback service")
             
             # Fallback to original re-embedding method
             logger.info("🤖 Falling back to re-embedding method for semantic matching")
             return self._find_semantic_feedback_matches_fallback(product_description)
             
         except Exception as e:
-            logger.error(f"Error finding semantic feedback matches via Langchain: {str(e)}")
+            logger.error(f"Error finding semantic feedback matches via Pinecone: {str(e)}")
             # Fallback to original method
             return self._find_semantic_feedback_matches_fallback(product_description)
     

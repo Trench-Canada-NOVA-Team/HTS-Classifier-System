@@ -36,21 +36,54 @@ def initialize_classifier():
         data_loader = HTSDataLoader(str(data_dir))
         preprocessor = TextPreprocessor()
         
-        # Initialize Langchain FAISS service for feedback
-        from services.faiss_feedback_service import FaissFeedbackService
-        faiss_service = FaissFeedbackService()
+        # Initialize Pinecone feedback service for feedback
+        from services.pinecone_feedback_service import PineconeFeedbackService
+        pinecone_feedback_service = PineconeFeedbackService()
         
-        # Initialize feedback handler with Langchain FAISS (no preprocessor parameter)
-        feedback_handler = FeedbackHandler(use_azure=True, faiss_service=faiss_service)
+        # Initialize feedback handler with Pinecone feedback service
+        feedback_handler = FeedbackHandler(use_azure=True, pinecone_feedback_service=pinecone_feedback_service)
         
-        # Initialize enhanced classifier with Langchain FAISS
-        classifier = FeedbackEnhancedClassifier(data_loader, preprocessor, feedback_handler, faiss_service)
+        # Initialize enhanced classifier with Pinecone feedback service
+        classifier = FeedbackEnhancedClassifier(data_loader, preprocessor, feedback_handler, pinecone_feedback_service)
         classifier.build_index()
         
-        # Rebuild Langchain FAISS from existing feedback data if needed
-        if faiss_service.get_feedback_stats()['total_vectors'] == 0:
-            logger.info("Langchain FAISS index is empty, rebuilding from existing feedback data...")
-            feedback_handler.rebuild_faiss_from_existing_data()
+        # Check if Pinecone feedback index needs to be rebuilt
+        # Only rebuild if the index is empty (has zero vectors)
+        feedback_stats = pinecone_feedback_service.get_feedback_stats()
+        
+        if feedback_stats.get('pinecone_available', False):
+            total_vectors = feedback_stats.get('total_vectors', 0)
+            
+            if total_vectors == 0:
+                logger.info("Pinecone feedback index is empty, checking if rebuild is needed...")
+                
+                # Check if there's actual feedback data in Azure that should be migrated
+                try:
+                    recent_feedback = feedback_handler.get_recent_feedback(days=365)  # Check all data
+                    
+                    if not recent_feedback.empty:
+                        corrections_count = len(recent_feedback[recent_feedback['predicted_code'] != recent_feedback['correct_code']])
+                        
+                        if corrections_count > 0:
+                            logger.info(f"Found {corrections_count} feedback corrections in Azure, rebuilding Pinecone feedback index...")
+                            success = feedback_handler.rebuild_pinecone_from_existing_data(days=365)
+                            
+                            if success:
+                                logger.info("Successfully rebuilt Pinecone feedback index from existing data")
+                            else:
+                                logger.warning("Failed to rebuild Pinecone feedback index, but continuing...")
+                        else:
+                            logger.info("No feedback corrections found in Azure data, skipping rebuild")
+                    else:
+                        logger.info("No feedback data found in Azure, skipping rebuild")
+                        
+                except Exception as rebuild_error:
+                    logger.error(f"Error during feedback index rebuild check: {str(rebuild_error)}")
+                    logger.info("Continuing with empty feedback index...")
+            else:
+                logger.info(f"Pinecone feedback index already contains {total_vectors} vectors, skipping rebuild")
+        else:
+            logger.warning("Pinecone feedback service not available, skipping feedback index initialization")
         
         logger.info("Classifier initialization completed successfully")
         return classifier, data_loader
@@ -61,13 +94,13 @@ def initialize_classifier():
 
 @st.cache_resource
 def initialize_feedback_handler():
-    """Initialize the feedback handler with Azure Blob Storage and Langchain FAISS support"""
+    """Initialize the feedback handler with Azure Blob Storage and Pinecone feedback support"""
     try:
-        from services.faiss_feedback_service import FaissFeedbackService
+        from services.pinecone_feedback_service import PineconeFeedbackService
         from utils.azure_blob_helper import FeedbackHandler
         
-        faiss_service = FaissFeedbackService()
-        feedback_handler = FeedbackHandler(use_azure=True, faiss_service=faiss_service)
+        pinecone_feedback_service = PineconeFeedbackService()
+        feedback_handler = FeedbackHandler(use_azure=True, pinecone_feedback_service=pinecone_feedback_service)
         
         logger.info("Feedback handler initialized successfully")
         return feedback_handler
